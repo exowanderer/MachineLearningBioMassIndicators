@@ -26,3 +26,11 @@ search = Search(
     query=eo_query
 )
 print(f'eo:cloud_cover search: {search.found()} items')
+
+search = Search(
+    url=url_earth_search,
+    datetime=eo_datetime,
+    bbox=eo_bbox,
+    query=eo_query
+)
+print(f'eo:cloud_cover search: {search.found()} items')
