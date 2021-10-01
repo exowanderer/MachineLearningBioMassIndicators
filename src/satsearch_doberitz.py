@@ -29,5 +29,12 @@ for feat_ in doberitz_feats['features']:
 
         items = search.items()
         print(items.summary())
+
+        filenames = items.download(
+            'metadata',
+            filename_template='downloads/${date}/${id}'
+        )
+        print(filenames)
+
     except SatSearchError as err:
         warning_message(err)
