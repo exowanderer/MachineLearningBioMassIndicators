@@ -16,33 +16,6 @@ eo_query = {
     'eo:cloud_cover': {'lt': 10}
 }
 
-search = Search(
-    url=url_earth_search,
-    bbox=eo_bbox
-)
-print(f'bbox search: {search.found()} items')
-
-search = Search(
-    url=url_earth_search,
-    datetime=eo_datetime
-)
-print(f'datetime search: {search.found()} items')
-
-search = Search(
-    url=url_earth_search,
-    query=eo_query
-)
-print(f'eo:cloud_cover search: {search.found()} items')
-
-search = Search(
-    url=url_earth_search,
-    datetime=eo_datetime,
-    bbox=eo_bbox,
-    query=eo_query,
-    collections=['sentinel-s2-l2a']
-)
-print(f'combined search: {search.found()} items')
-
 for feat_ in doberitz_feats['features']:
     try:
         search = Search(
