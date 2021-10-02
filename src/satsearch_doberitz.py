@@ -24,7 +24,6 @@ doberitz_geojson = 'doberitz_multipolygon.geojson'
 with open(doberitz_geojson, 'r') as json_in:
     doberitz_feats = json.load(json_in)
 
-eo_bbox = [-110, 39.5, -105, 40.5]
 eo_datetime = '2021-09-01/2021-10-01'
 eo_query = {
     'eo:cloud_cover': {'lt': 10}
@@ -36,22 +35,32 @@ for feat_ in doberitz_feats['features']:
             url=url_earth_search,
             intersects=feat_['geometry'],
             # bbox=eo_bbox,
-            datetime=eo_datetime,
-            query=eo_query,
-            collections=['sentinel-s2-l2a'],
+            # datetime=eo_datetime,
+            # query=eo_query,
+            collections=['sentinel-s2-l2a']
             # limit=2
         )
-        print(f'combined search: {search.found()} items')
+        print(f'Combined search: {search.found()} items')
 
         items = search.items()
         print(items.summary())
 
         if flag_download:
-            filenames = items.download_assets(
+            # NIR Band
+            b08_filenames = items.download(
+                'B08',
                 filename_template='assets/${date}/${id}',
                 requester_pays=True
             )
-            print(filenames)
+            print(b08_filenames)
+
+            # RED Band
+            b04_filenames = items.download(
+                'B04',
+                filename_template='assets/${date}/${id}',
+                requester_pays=True
+            )
+            print(b04_filenames)
 
     except SatSearchError as err:
         warning_message(err)
