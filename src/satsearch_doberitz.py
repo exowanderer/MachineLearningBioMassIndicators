@@ -47,7 +47,7 @@ for feat_ in doberitz_feats['features']:
 
         if flag_download:
             # NIR Band
-            b08_filenames = items.download_assets(requester_pays=True)
+            # b08_filenames = items.download_assets(requester_pays=True)
             b08_filenames = items.download(
                 'B08',
                 # filename_template='assets/${date}/${id}',
