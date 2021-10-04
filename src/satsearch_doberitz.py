@@ -24,7 +24,7 @@ doberitz_geojson = 'doberitz_multipolygon.geojson'
 with open(doberitz_geojson, 'r') as json_in:
     doberitz_feats = json.load(json_in)
 
-eo_datetime = '2021-09-01/2021-10-01'
+eo_datetime = '2016-01-01/2022-01-01'
 eo_query = {
     'eo:cloud_cover': {'lt': 10}
 }

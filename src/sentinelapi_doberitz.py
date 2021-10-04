@@ -111,7 +111,7 @@ def get_scenes_gdf(
         bounding_box, start_date, end_date, platform_name, processing_level,
         min_cloud_coverage, max_cloud_coverage, verbose=False):
 
-    # connect to the API
+    # Connect to the API
     api = SentinelAPI(
         user=os.environ.get('COPERNICUS_USERNAME') or input('Username: '),
         password=os.environ.get('COPERNICUS_PASS') or getpass(),
@@ -123,8 +123,8 @@ def get_scenes_gdf(
     products = api.query(
         footprint,
         date=(start_date, end_date),
-        platform_name=platform_name,
-        processing_level=processing_level,
+        platformname=platform_name,
+        processinglevel=processing_level,
         cloudcoverpercentage=(min_cloud_coverage, max_cloud_coverage)
     )
 
@@ -140,18 +140,18 @@ def get_scenes_gdf(
 
     scenes = api.to_geodataframe(products_sorted)
 
-    fov_all_idents = [ident_.split('_')[5] for ident_ in scenes.identifier]
-    fov_unique_idents = np.unique([
+    scene_all_idents = [ident_.split('_')[5] for ident_ in scenes.identifier]
+    scene_unique_idents = np.unique([
         ident_.split('_')[5] for ident_ in scenes.identifier
     ])
 
-    dict_per_fov = {}
-    for ident_ in fov_unique_idents:
-        ident_match = np.array(fov_all_idents) == ident_
-        dict_per_fov[ident_] = scenes.iloc[ident_match]
+    dict_per_scene = {}
+    for ident_ in scene_unique_idents:
+        ident_match = np.array(scene_all_idents) == ident_
+        dict_per_scene[ident_] = scenes.iloc[ident_match]
 
     if verbose:
-        for key, val in dict_per_fov.items():
+        for key, val in dict_per_scene.items():
             info_message([
                 key,
                 val.iloc[0].beginposition,
@@ -160,10 +160,52 @@ def get_scenes_gdf(
             ])
 
     gdf = gpd.GeoDataFrame(
-        [val.iloc[0] for _, val in dict_per_fov.items()]
+        [val.iloc[0] for _, val in dict_per_scene.items()]
     )
 
     return gdf, scenes, api
+
+
+def download_data(api, scenes, verbose=False):
+    # Download Multiple UUIDs
+    sentinel2_data = {}
+
+    for k, (key, val) in enumerate(scenes.T.items()):
+        if verbose:
+            info_message([k, key, val.title])
+
+        try:
+            info_message(f"Attempting to Download: {val.uuid}")
+            sentinel2_data[val.uuid] = api.download(val.uuid)
+        except Exception as err:
+            info_message(err)
+
+        if val.uuid in sentinel2_data.keys() \
+                and os.path.exists(sentinel2_data[val.uuid]['path']):
+            info_message(f"Download Completed Sucessfully: {val.identifier}")
+        else:
+            info_message(f"File for {val.uuid} does not exist")
+
+        if verbose:
+            for key, val in sentinel2_data.items():
+                info_message(val['title'])
+
+    download_dir = r'./sentinelsat'
+    if not os.path.exists(download_dir):
+        os.mkdir(download_dir)
+
+    # Unzip Multiple UUIDs
+    for key, val in sentinel2_data.items():
+        if not os.path.exists(f"sentinelsat/{val['title']}"):
+            info_message(f"Unzipping {key} into {val['title']}")
+            zip_ref = zipfile.ZipFile(val['path'], 'r')
+            zip_ref.extractall(f"sentinelsat/{val['title']}")
+            zip_ref.close()
+            info_message("Unzip successful")
+
+    if verbose:
+        for key, val in sentinel2_data.items():
+            info_message(os.listdir(f"sentinelsat/{val['title']}")[0])
 
 
 if __name__ == '__main__':
@@ -174,13 +216,14 @@ if __name__ == '__main__':
         type=str,
         default='doberitz_multipolygon.geojson'
     )
-    args.add_argument('--start_date', type=str, default='20150623')
-    args.add_argument('--end_date', type=str, default='20211231')
+    args.add_argument('--start_date', type=str, default='20190101')
+    args.add_argument('--end_date', type=str, default='20200101')
     args.add_argument('--platform_name', type=str, default='Sentinel-2')
     args.add_argument('--processing_level', type=str, default='Level-2A')
     args.add_argument('--min_cloud_coverage', type=float, default=0)
     args.add_argument('--max_cloud_coverage', type=float, default=100)
     args.add_argument('--env', type=str, default='.env')
+    args.add_argument('--download_all', action='store_true', default=False)
     args.add_argument('--verbose', action='store_true', default=False)
     args.add_argument('--verbose_plot', action='store_true', default=False)
     clargs = args.parse_args()
@@ -207,3 +250,13 @@ if __name__ == '__main__':
     gdf_scenes, scenes, api = get_scenes_gdf(
         bounding_box, start_date, end_date, platform_name, processing_level,
         min_cloud_coverage, max_cloud_coverage, verbose=False)
+
+    if verbose_plot:
+        f, ax = plt.subplots(figsize=(15, 15))
+        gdf_scenes.plot(column='uuid', cmap=None, alpha=0.5, ax=ax)
+        gdf_scenes.apply(lambda x: ax.annotate(text=x.identifier.split(
+            '_')[5], xy=x.geometry.centroid.coords[0], ha='center'), axis=1)
+        gdf_up42_geoms.plot(ax=ax, alpha=0.5, color='orange')
+        plt.show()
+
+    download_data(api, gdf_scenes, verbose=verbose)
