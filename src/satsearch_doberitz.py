@@ -35,8 +35,8 @@ for feat_ in doberitz_feats['features']:
             url=url_earth_search,
             intersects=feat_['geometry'],
             # bbox=eo_bbox,
-            # datetime=eo_datetime,
-            # query=eo_query,
+            datetime=eo_datetime,
+            query=eo_query,
             collections=['sentinel-s2-l2a']
             # limit=2
         )
