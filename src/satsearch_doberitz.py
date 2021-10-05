@@ -4,23 +4,25 @@ import geopandas as gpd
 import json
 import numpy as np
 import os
+import rasterio
 
 from argparse import ArgumentParser
 from dotenv import load_dotenv
 from matplotlib import pyplot as plt
-from statsmodels.robust import scale
-
-from fiona.crs import from_epsg
-import rasterio
-from rasterio import plot
-from rasterio.merge import merge
-from rasterio.mask import mask
-from shapely.geometry import box
-
 from tqdm import tqdm
 
+from sklearn.cluster import KMeans, MiniBatchKMeans
+from sklearn.preprocessing import RobustScaler, MinMaxScaler
+from sklearn.model_selection import train_test_split
+from statsmodels.robust import scale
+
+# from fiona.crs import from_epsg
+# from rasterio import plot
+# from rasterio.merge import merge
+from rasterio.mask import mask
+# from shapely.geometry import box
 from satsearch import Search
-from satsearch.search import SatSearchError
+# from satsearch.search import SatSearchError
 
 # TODO: change from utils to .utils when modularizing
 from utils import info_message, warning_message, debug_message
@@ -239,6 +241,70 @@ def compute_ndvi(band04, band08, n_sig=10):
     return ndvi_masked, mask_transform
 
 
+def kmeans_spatial_cluster(image, n_clusters=5, quantile_range=(1, 99)):
+    """Compute kmeans clustering spatially over image as grey scale levels
+
+    Args:
+        image (np.array): input greayscale image
+        n_clusters (int, optional): number of grey scales. Defaults to 5.
+        quantile_range (tuple, optional): RobustScaler outlier rejecton 
+            threshold. Defaults to (1, 99).
+
+    Returns:
+        sklearn.cluster._kmeans.KMeans: trained kmeans clustering object
+    """
+    # Scale the input image data after reformatting 2D image as 1D vector and
+    #   rejecting the outliers using the RobustScaler algorithm
+    sclr = RobustScaler(quantile_range=quantile_range)
+    pixel_scaled = sclr.fit_transform(image.reshape(-1, 1))
+
+    # Configure kmeans clustering instance
+    kmeans = KMeans(
+        n_clusters=n_clusters,
+        n_init=10,
+        max_iter=300,
+        tol=0.0001,
+        verbose=0,
+        random_state=None,
+        copy_x=True,
+        algorithm='auto',
+    )
+
+    # Compute the K-Means clusters and store in object
+    kmeans.fit(pixel_scaled)
+
+    return kmeans
+
+
+def sanity_check_spatial_kmeans(
+        kmeans, image, img_shape, quantile_range=(1, 99)):
+    """Plot imshow of clustering solution as sanity check
+
+    Args:
+        kmeans (sklearn.cluster._kmeans.kmeans): object storing kmeans solution
+        image (np.array): image with which kmeans was trains
+        quantile_range (tuple, optional): RobustScaler outlier rejecton
+            threshold. Defaults to (1, 99).
+    """
+    sclr = RobustScaler(quantile_range=quantile_range)
+    pixel_scaled = sclr.fit_transform(image.reshape(-1, 1))
+
+    # cluster_centers = kmeans.cluster_centers_
+    cluster_pred = kmeans.predict(pixel_scaled)
+
+    _, axs = plt.subplots(
+        ncols=kmeans_.n_clusters + 1,
+        figsize=(10*(kmeans_.n_clusters + 1), 10)
+    )
+
+    axs[0].imshow(cluster_pred.reshape(img_shape))
+    for k in range(kmeans_.n_clusters):
+        axs[k+1].imshow((cluster_pred == k).reshape(img_shape))
+
+    plt.subplots_adjust(wspace=1e-2)
+    plt.show()
+
+
 if __name__ == '__main__':
     """
     Use case:
@@ -393,9 +459,17 @@ if __name__ == '__main__':
                     n_sig=clargs.n_sig
                 )
 
+                # Compute K-Means Spatial Clustering per Image
+                kmeans_ = kmeans_spatial_cluster(
+                    ndvi_masked_,
+                    n_clusters=5,
+                    quantile_range=(1, 99)
+                )
+
                 # Store the NDVI and masked transform in data struct
                 jp2_data[scene_id_][res_][date_]['ndvi'] = ndvi_masked_
                 jp2_data[scene_id_][res_][date_]['transform'] = mask_transform_
+                jp2_data[scene_id_][res_][date_]['kmeans_spatial'] = kmeans_
 
                 if clargs.verbose_plot:
                     # Sanity Check with imshow
