@@ -110,6 +110,9 @@ ENV/
 env.bak/
 venv.bak/
 
+# AWS
+aws_rootkey.csv
+
 # Spyder project settings
 .spyderproject
 .spyproject
@@ -127,3 +130,7 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+#sat-search
+assets/*
+assets/
