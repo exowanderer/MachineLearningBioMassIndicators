@@ -208,6 +208,80 @@ def download_data(api, scenes, verbose=False):
             info_message(os.listdir(f"sentinelsat/{val['title']}")[0])
 
 
+def get_directory_structure(ident='T33UUU', file_ext='.jp2'):
+    scene_unique_idents = np.unique([
+        ident_.split('_')[5] for ident_ in scenes.identifier
+    ])
+
+    idx_ident = np.where(np.array(scene_unique_idents == ident))[0][0]
+    gdf_ident = gdf_scenes.iloc[idx_ident]
+    filename_date = gdf_ident.title.split('_')[2]
+
+    dir_ident = os.path.join(
+        'sentinelsat', gdf_ident.title, gdf_ident.filename
+    )
+
+    dir_granule = os.listdir(os.path.join(dir_ident, 'GRANULE'))[0]
+
+    file_structure = {}
+    file_structure['ident_dir'] = {}
+    for res_ in [10, 20, 60]:
+        res_dir = f'R{res_}m'
+        file_structure['ident_dir'][res_dir] = os.path.join(
+            dir_ident, 'GRANULE', dir_granule, 'IMG_DATA', res_dir
+        )
+
+    file_structure['jp2_files'] = {}
+    for res_ in [10, 20, 60]:
+        res_dir = f'R{res_}m'
+        file_structure['jp2_files'][res_dir] = os.listdir(
+            file_structure['ident_dir'][res_dir]
+        )
+
+    file_structure['jp2_filebase'] = {}
+    for res_ in [10, 20, 60]:
+        res_dir = f'R{res_}m'
+        file_structure['jp2_filebase'][res_dir] = '_'.join(
+            file_structure['jp2_files'][res_dir][0].split('_')[:2]
+        )
+
+    file_structure['jp2_filenames'] = {}
+    for res_ in [10, 20, 60]:
+        res_dir = f'R{res_}m'
+        file_structure['jp2_filenames'][res_dir] = {}
+        for k in range(12):
+            band_label = f"B{k+1:0>2}"
+            if band_label == 'B10':
+                continue
+
+            if band_label == 'B08':
+                band_label = 'B8A'
+
+            ident_dirname = '_'.join([
+                file_structure['jp2_filebase'][res_dir],
+                band_label,
+                res_dir[1:]
+            ]) + file_ext
+
+            file_structure['jp2_filenames'][res_dir][band_label] = os.path.join(
+                file_structure['ident_dir'][res_dir], ident_dirname
+            )
+
+    file_structure['scl_filename'] = {}
+    file_structure['scl_filepath'] = {}
+    for res_ in [10, 20, 60]:
+        res_dir = f'R{res_}m'
+        file_structure['scl_filename'][res_dir] = (
+            f'{ident}_{filename_date}_SCL_{res_dir[1:]}.jp2'
+        )
+        file_structure['scl_filepath'][res_dir] = os.path.join(
+            file_structure['ident_dir'][res_dir],
+            file_structure['scl_filename'][res_dir]
+        )
+
+    return file_structure
+
+
 if __name__ == '__main__':
     from argparse import ArgumentParser
     args = ArgumentParser()
@@ -260,3 +334,38 @@ if __name__ == '__main__':
         plt.show()
 
     download_data(api, gdf_scenes, verbose=verbose)
+
+    # if verbose_plot:
+    #     # Follow specific Scence IDs
+    #     gdfs = gpd.GeoDataFrame([gdf_T33UUU])
+    #     fig, ax = plt.subplots(figsize=(15, 15))
+    #     gdfs.plot(column='uuid', cmap=None, alpha=0.5, ax=ax)
+    #     gdfs.apply(
+    #         lambda x: ax.annotate(
+    #             text=x.identifier.split('_')[5],
+    #             xy=x.geometry.centroid.coords[0],
+    #             ha='center'
+    #         ),
+    #         axis=1
+    #     )
+
+    #     gdf_up42_geoms.plot(ax=ax, alpha=0.5, color='orange')
+    #     plt.show()
+
+    files_T33UUU = get_directory_structure(
+        ident='T33UUU', file_ext='.jp2'
+    )
+
+    res_dir = 'R60m'
+
+    jp2_60m_T33UUU_data = {}
+    for band_label, fname_ in files_T33UUU['jp2_filenames'][res_dir].items():
+        jp2_60m_T33UUU_data[band_label] = rasterio.open(
+            fname_, driver='JP2OpenJPEG'
+        )
+
+    scl_60m_T33UUU_raster = rasterio.open(
+        files_T33UUU['scl_filepath'][res_dir]
+    )
+
+    scl_60m_T33UUU_data = scl_60m_T33UUU_raster.read()[0]
