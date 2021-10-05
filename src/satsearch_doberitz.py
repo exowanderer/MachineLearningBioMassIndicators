@@ -41,6 +41,7 @@ def bounding_box_coords(gdf):
     max_lon = -180
     max_lat = -90
 
+    # Loop of geometries to find min-max lon-lat coords
     for geom_ in gdf['geometry']:
         geom_rect_bound = geom_.minimum_rotated_rectangle.bounds
         minlon_, minlat_, maxlon_, maxlat_ = geom_rect_bound
@@ -65,7 +66,11 @@ def geom_to_bounding_box(gdf):
     Returns:
         dict: dicitonary representing a GeoJSON input with only the bounding box
     """
+
+    # Find bounding box coordinates
     min_lon, max_lon, min_lat, max_lat = bounding_box_coords(gdf)
+
+    # Return GeoJSON format with bounding box as AOI
     return {
         "type": "FeatureCollection",
         "features": [
@@ -99,19 +104,27 @@ def get_prefix_filepath(href, collection='sentinel-s2-l2a'):
     Returns:
         tuple (str, str): `prefix` and `output_filepath` for boto3
     """
+
+    # Isolate the boto3 S3 bucket prefix from the href url
     prefix = href.replace(f's3://{collection}/', '')
 
-    filename = prefix[prefix.rfind('/') + 1:]  # Remove path
+    # Isolate the jp2 filename from the prefix
+    filename = prefix[prefix.rfind('/') + 1:]
+
+    # Isolate the output file path from the prefix
     dir_resolution = prefix.split('/')[8]
     dir_sector = ''.join(prefix.split('/')[1:4])
     dir_date = '-'.join(prefix.split('/')[4:7])
 
+    # Build the output file directory
     output_filedir = os.path.join(
         collection,
         dir_sector,
         dir_resolution,
         dir_date
     )
+
+    # Build the output file path
     output_filepath = os.path.join(output_filedir, filename)
 
     # Check if filedir exists and create it if not
@@ -121,7 +134,7 @@ def get_prefix_filepath(href, collection='sentinel-s2-l2a'):
     return prefix, output_filepath
 
 
-def download_tile_band(href, collection='sentinel-s2-l2a'):
+def download_tile_band(href, collection='sentinel-s2-l2a', s3_client=None):
     """Download a specific S3 file URL
 
     Args:
@@ -129,6 +142,9 @@ def download_tile_band(href, collection='sentinel-s2-l2a'):
         collection (str, optional): Earth-AWS collection.
             Defaults to 'sentinel-s2-l2a'.
     """
+    assert(s3_client is not None), 'assign s3_client in __main__'
+
+    # Use the href to form the boto3 S3 prefix and output file path
     prefix, output_filepath = get_prefix_filepath(
         href,
         collection=collection
@@ -148,14 +164,36 @@ def download_tile_band(href, collection='sentinel-s2-l2a'):
 
 
 def get_coords_from_geometry(gdf):
-    """Function to parse features from GeoDataFrame in such a manner that rasterio wants them"""
+    """Function to parse features from GeoDataFrame in such a manner that rasterio wants them
+
+    Args:
+        gdf (gpd.GeoDataFrame): gdf with list of geometries for each AOI
+
+    Returns:
+        list: coordinates to isolate the AOI
+    """
+
+    # Coords will output as list
     coords = []
     for feat_ in json.loads(gdf.to_json())['features']:
+        # Loop over each geometry as a json output
         coords.append(feat_['geometry'])
+
     return coords
 
 
 def compute_ndvi(band04, band08, n_sig=10):
+    """Compute the NDVI image from band08 and band04 values
+
+    Args:
+        band04 (dict): Sentinel-2-L2A Band04 raster data
+        band08 (dict): Sentinel-2-L2A Band08 raster data
+        n_sig (int, optional): Number is sigma to quality as an outlier.
+            Defaults to 10.
+
+    Returns:
+        tuple (np.array, affine.Affine): NDVI image and its related transform
+    """
     # Convert from MAD to STD because Using the MAD is
     #   more agnostic to outliers than STD
     mad2std = 1.4826
@@ -165,25 +203,33 @@ def compute_ndvi(band04, band08, n_sig=10):
         crs=band04['raster'].crs.data
     )
 
+    # Compute the AOI coordinates from the raster crs data
     coords = get_coords_from_geometry(gdf_crs)
 
+    # Mask Band04 data with AOI coords
     band04_masked, _ = mask(
         dataset=band04['raster'],
         shapes=coords,
         crop=True
     )
+
+    # Mask Band08 data with AOI coords
     band08_masked, mask_transform = mask(
         dataset=band08['raster'],
         shapes=coords,
         crop=True
     )
 
+    # Create NDVI from masked Band04 and Band08
     ndvi_masked = np.true_divide(
         band08_masked[0] - band04_masked[0],
         band08_masked[0] + band04_masked[0]
     )
 
+    # FIll in missing data (outside mask) as zeros
     ndvi_masked[np.isnan(ndvi_masked)] = 0
+
+    # median replacement from n_sigma outlier rejection
     med_ndvi = np.median(ndvi_masked.ravel())
     std_ndvi = scale.mad(ndvi_masked.ravel()) * mad2std
 
@@ -203,15 +249,13 @@ if __name__ == '__main__':
         --end_date 2020-02-01 \
         --cloud_cover 1 \
         --download\
-        --verbose
+        --verbose\
+        --verbose_plot
 
     OR
 
-    python satsearch_doberitz.py --band_names b04 b08 --start_date 2020-01-01 --end_date 2020-02-01 --cloud_cover 1 --download --verbose
+    python satsearch_doberitz.py --band_names b04 b08 --start_date 2020-01-01 --end_date 2020-02-01 --cloud_cover 1 --download --verbose --verbose_plot
     """
-    load_dotenv('.env')
-    s3_client = boto3.client('s3')
-
     args = ArgumentParser()
     args.add_argument(
         '--geojson', type=str, default='doberitz_multipolygon.geojson'
@@ -225,8 +269,13 @@ if __name__ == '__main__':
     args.add_argument('--n_sig', type=float, default=10)
     args.add_argument('--download', action='store_true')
     args.add_argument('--download_all', action='store_true')
+    args.add_argument('--env_filename', type=str, default='.env')
     args.add_argument('--verbose', action='store_true')
+    args.add_argument('--verbose_plot', action='store_true')
     clargs = args.parse_args()
+
+    load_dotenv(clargs.env_filename)
+    s3_client = boto3.client('s3')
 
     # n_sig = 10
     # Get Sat-Search URL
@@ -282,7 +331,8 @@ if __name__ == '__main__':
                     filepaths[band_name_] = []
                 # Download the selected bands
                 filepath_ = download_tile_band(
-                    feat_['assets'][band_name_.upper()]['href']
+                    feat_['assets'][band_name_.upper()]['href'],
+                    s3_client=s3_client
                 )
                 filepaths[band_name_].append(filepath_)
     else:
@@ -299,14 +349,20 @@ if __name__ == '__main__':
                 )
                 filepaths[band_name_].append(output_filepath)
 
+    # Load all data into JSON data structure
     jp2_data = {}
     for band_name_, filepaths_ in filepaths.items():
+        # loop over band names
         for fpath_ in filepaths_:
-            _, scene_id_, res_, date_, _ = fpath_.split('/')
+            # loop over file paths
             if not os.path.exists(fpath_):
                 warning_message(f"{fpath_} does not exist")
                 continue
 
+            # Use filepath to identify scene_id, res, and date
+            _, scene_id_, res_, date_, _ = fpath_.split('/')
+
+            # Build up data structure for easier access later
             if scene_id_ not in jp2_data.keys():
                 jp2_data[scene_id_] = {}
             if res_ not in jp2_data[scene_id_].keys():
@@ -320,10 +376,10 @@ if __name__ == '__main__':
                 info_message(f"{fpath_} :: {os.path.exists(fpath_)}")
 
             raster_ = rasterio.open(fpath_, driver='JP2OpenJPEG')
-            rast_data_ = raster_.read()
+            # rast_data_ = raster_.read()
 
             jp2_data[scene_id_][res_][date_][band_name_]['raster'] = raster_
-            jp2_data[scene_id_][res_][date_][band_name_]['data'] = rast_data_
+            # jp2_data[scene_id_][res_][date_][band_name_]['data'] = rast_data_
 
     # Compute NDVI for each Scene, Resolution, and Date
     for scene_id_, res_dict_ in jp2_data.items():
