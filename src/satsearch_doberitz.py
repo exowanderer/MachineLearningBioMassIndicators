@@ -80,43 +80,34 @@ def geom_to_bounding_box(gdf):
     }
 
 
-def create_prefix(feature_id):
-    feature_id = 'S2A_32UQD_20161128_0_L2A'
-    _, tile_id, date, time, _ = feature_id.split('_')
-    sector_id = tile_id[:2]
-    subsector_id = tile_id[2]
-    scene_id = tile_id[3:]
+def download_tile_band(href, collection='sentinel-s2-l2a'):
+    """Download a specific S3 file URL
 
-    year = date[:4]
-    month = date[4:6].lstrip('0')  # if date.__len__() == 8 else date[4]
-    day = date[6:]
-
-    Prefix = (
-        f'tiles/'
-        f'{sector_id}/{subsector_id}/{scene_id}/'
-        f'{year}/{month}/{day}/{time}'
-    )
-
-    return Prefix
-
-
-def download_tile_band(href, bucket='sentinel-s2-l2a'):
-    href = feat_['assets'][band_name]['href']
-    prefix = href.replace('s3://sentinel-s2-l2a/', '')
+    Args:
+        href (str): S3 file URL
+        collection (str, optional): Earth-AWS collection.
+            Defaults to 'sentinel-s2-l2a'.
+    """
+    prefix = href.replace(f's3://{collection}/', '')
 
     filename = prefix[prefix.rfind('/')+1:]  # Remove path
     dir_sector = ''.join(prefix.split('/')[1:4])
     dir_date = '-'.join(prefix.split('/')[4:7])
 
-    output_filedir = os.path.join('sentinel-s2-l2a', dir_sector, dir_date)
+    output_filedir = os.path.join(collection, dir_sector, dir_date)
     output_filepath = os.path.join(output_filedir, filename)
 
+    # Check if filedir exists and create it if not
     if not os.path.exists(output_filedir):
         os.makedirs(output_filedir)
 
+    # Check if file already exists to skip double downloading
+    if os.path.exists(output_filepath):
+        return
+
     # Download it to current directory
     s3_client.download_file(
-        bucket,
+        collection,
         prefix,
         output_filepath,
         {'RequestPayer': 'requester'}
@@ -124,6 +115,17 @@ def download_tile_band(href, bucket='sentinel-s2-l2a'):
 
 
 if __name__ == '__main__':
+    """
+    Use case:
+
+    python satsearch_doberitz.py \
+        --band_names b04 b08\
+        --start_date 2020-01-01 \
+        --end_date 2020-02-01 \
+        --cloud_cover 1 \
+        --download\
+        --verbose
+    """
     load_dotenv('.env')
     s3_client = boto3.client('s3')
 
@@ -133,6 +135,7 @@ if __name__ == '__main__':
     )
     args.add_argument('--tile_id', type=str)
     args.add_argument('--band_names', nargs='+', default=['B04', 'B08'])
+    args.add_argument('--collection', type=str, default='sentinel-s2-l2a')
     args.add_argument('--start_date', type=str, default='2016-01-01')
     args.add_argument('--end_date', type=str, default='2022-01-01')
     args.add_argument('--cloud_cover', type=int, default=10)
@@ -141,38 +144,53 @@ if __name__ == '__main__':
     args.add_argument('--verbose', action='store_true')
     clargs = args.parse_args()
 
+    # Get Sat-Search URL
     url_earth_search = os.environ.get('STAC_API_URL')
+
+    # Get Input GeoJSON
     input_geojson = clargs.geojson
 
+    # Set Date time start and stop for query
     eo_datetime = f'{clargs.start_date}/{clargs.end_date}'
+
+    # Set cloud cover percentage for query
     eo_query = {
         'eo:cloud_cover': {'lt': clargs.cloud_cover}
     }
 
+    # Load geojson into gpd.GeoDataFrame
     gdf_up42_geoms = gpd.read_file(clargs.geojson)
+
+    # Build a GeoJSON bounding box around AOI(s)
     bounding_box = geom_to_bounding_box(gdf_up42_geoms)
 
+    # Use Sat-Search to idenitify and load all meta data within search field
     search = Search(
         url=url_earth_search,
         intersects=bounding_box['features'][0]['geometry'],
-        # bbox=eo_bbox,
         datetime=eo_datetime,
         query=eo_query,
-        collections=['sentinel-s2-l2a']
-        # limit=2
+        collections=[clargs.collection]
     )
 
-    print(f'Combined search: {search.found()} items')
+    if clargs.verbose:
+        print(f'Combined search: {search.found()} items')
 
+    # Allocate all meta data for acquisition
     items = search.items()
 
     if clargs.verbose:
         print(items.summary())
 
     if clargs.download:
+        # Allocate MetaData in GeoJSON
         items_geojson = items.geojson()
+
+        # Loop over GeoJSON Features
         for feat_ in tqdm(items_geojson['features']):
+            # Loop over GeoJSON Bands
             for band_name in tqdm(clargs.band_names):
+                # Download the selected bands
                 download_tile_band(feat_['assets'][band_name.upper()]['href'])
 
     # all_filenames = items.download_assets(requester_pays=True)
