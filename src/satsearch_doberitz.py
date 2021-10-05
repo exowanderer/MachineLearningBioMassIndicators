@@ -241,7 +241,9 @@ def compute_ndvi(band04, band08, n_sig=10):
     return ndvi_masked, mask_transform
 
 
-def kmeans_spatial_cluster(image, n_clusters=5, quantile_range=(1, 99)):
+def kmeans_spatial_cluster(
+        image, n_clusters=5, quantile_range=(1, 99),
+        verbose=False, verbose_plot=False):
     """Compute kmeans clustering spatially over image as grey scale levels
 
     Args:
@@ -273,11 +275,37 @@ def kmeans_spatial_cluster(image, n_clusters=5, quantile_range=(1, 99)):
     # Compute the K-Means clusters and store in object
     kmeans.fit(pixel_scaled)
 
+    if verbose_plot:
+        sanity_check_spatial_kmeans(
+            kmeans, image, quantile_range=quantile_range
+        )
+
     return kmeans
 
 
+def sanity_check_ndvi_statistics(image, scene_id, res, date, bins=100):
+    """Plot imshow and hist over image
+
+    Args:
+        image (np.arra): iamge with which to visual
+        scene_id (str): Sentinel-2A L2A scene ID
+        res (str): Sentinel-2A L2A resolution
+        date (str): Sentinel-2A L2A acquistion datetime
+        bins (int, optional): Number of bins for histogram. Defaults to 100.
+    """
+    # Sanity Check with imshow
+    plt.figure()
+    plt.imshow(image)
+    plt.title(f"NDVI Image: {scene_id} - {res} - {date}")
+
+    # Sanity Check with visual histogram
+    plt.figure()
+    plt.hist(image.ravel()[(image.ravel() != 0)], bins=bins)
+    plt.title(f"NDVI Hist: {scene_id} - {res} - {date}")
+
+
 def sanity_check_spatial_kmeans(
-        kmeans, image, img_shape, quantile_range=(1, 99)):
+        kmeans, image, quantile_range=(1, 99)):
     """Plot imshow of clustering solution as sanity check
 
     Args:
@@ -293,13 +321,13 @@ def sanity_check_spatial_kmeans(
     cluster_pred = kmeans.predict(pixel_scaled)
 
     _, axs = plt.subplots(
-        ncols=kmeans_.n_clusters + 1,
-        figsize=(10*(kmeans_.n_clusters + 1), 10)
+        ncols=kmeans.n_clusters + 1,
+        figsize=(10*(kmeans.n_clusters + 1), 10)
     )
 
-    axs[0].imshow(cluster_pred.reshape(img_shape))
-    for k in range(kmeans_.n_clusters):
-        axs[k+1].imshow((cluster_pred == k).reshape(img_shape))
+    axs[0].imshow(cluster_pred.reshape(image.shape))
+    for k in range(kmeans.n_clusters):
+        axs[k+1].imshow((cluster_pred == k).reshape(image.shape))
 
     plt.subplots_adjust(wspace=1e-2)
     plt.show()
@@ -463,7 +491,9 @@ if __name__ == '__main__':
                 kmeans_ = kmeans_spatial_cluster(
                     ndvi_masked_,
                     n_clusters=5,
-                    quantile_range=(1, 99)
+                    quantile_range=(1, 99),
+                    verbose=clargs.verbose,
+                    verbose_plot=clargs.verbose_plot
                 )
 
                 # Store the NDVI and masked transform in data struct
@@ -472,18 +502,9 @@ if __name__ == '__main__':
                 jp2_data[scene_id_][res_][date_]['kmeans_spatial'] = kmeans_
 
                 if clargs.verbose_plot:
-                    # Sanity Check with imshow
-                    plt.figure()
-                    plt.imshow(ndvi_masked_)
-                    plt.title(f"NDVI Image: {scene_id_} - {res_} - {date_}")
-
-                    # Sanity Check with visual histogram
-                    plt.figure()
-                    plt.hist(
-                        ndvi_masked_.ravel()[(ndvi_masked_.ravel() != 0)],
-                        bins=100
+                    sanity_check_ndvi_statistics(
+                        ndvi_masked_, scene_id_, res_, date_, bins=100
                     )
-                    plt.title(f"NDVI Hist: {scene_id_} - {res_} - {date_}")
 
     if clargs.verbose_plot:
         plt.show()
