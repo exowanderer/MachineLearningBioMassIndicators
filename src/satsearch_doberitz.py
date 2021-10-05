@@ -113,17 +113,7 @@ def download_tile_band(href, bucket='sentinel-s2-l2a'):
 
     if not os.path.exists(output_filedir):
         os.makedirs(output_filedir)
-        # output_fileparts = output_filedir.split('/')
-        # path_parts = output_fileparts[0]
-        # for part_ in output_fileparts[1:]:
-        #     if not os.path.exists(path_parts):
-        #         os.mkdir(path_parts)
-        #     path_parts = os.path.join(path_parts, part_)
 
-    # print(bucket)
-    # print(prefix)
-    # print(output_filedir, os.path.exists(output_filedir))
-    # print(output_filepath)
     # Download it to current directory
     s3_client.download_file(
         bucket,
@@ -142,6 +132,7 @@ if __name__ == '__main__':
         '--geojson', type=str, default='doberitz_multipolygon.geojson'
     )
     args.add_argument('--tile_id', type=str)
+    args.add_argument('--band_names', nargs='+', default=['B04', 'B08'])
     args.add_argument('--start_date', type=str, default='2016-01-01')
     args.add_argument('--end_date', type=str, default='2022-01-01')
     args.add_argument('--cloud_cover', type=int, default=10)
@@ -178,14 +169,11 @@ if __name__ == '__main__':
     if clargs.verbose:
         print(items.summary())
 
-    items_geojson = items.geojson()
-
-    for feat_ in tqdm(items_geojson['features']):
-        for band_name in tqdm(['B04', 'B08']):
-            download_tile_band(feat_['assets'][band_name]['href'])
-        # for name_, asset_ in feat_['assets'].items():
-        #     # print(asset_[band_name]['href'])
-        #     print(asset_.keys())
+    if clargs.download:
+        items_geojson = items.geojson()
+        for feat_ in tqdm(items_geojson['features']):
+            for band_name in tqdm(clargs.band_names):
+                download_tile_band(feat_['assets'][band_name.upper()]['href'])
 
     # all_filenames = items.download_assets(requester_pays=True)
     """
