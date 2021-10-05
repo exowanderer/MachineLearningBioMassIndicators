@@ -90,7 +90,11 @@ def get_prefix_filepath(href, collection='sentinel-s2-l2a'):
     output_filedir = os.path.join(collection, dir_sector, dir_date)
     output_filepath = os.path.join(output_filedir, filename)
 
-    return prefix, output_filedir, output_filepath
+    # Check if filedir exists and create it if not
+    if not os.path.exists(output_filedir):
+        os.makedirs(output_filedir)
+
+    return prefix, output_filepath
 
 
 def download_tile_band(href, collection='sentinel-s2-l2a'):
@@ -101,26 +105,22 @@ def download_tile_band(href, collection='sentinel-s2-l2a'):
         collection (str, optional): Earth-AWS collection.
             Defaults to 'sentinel-s2-l2a'.
     """
-    prefix, output_filedir, output_filepath = get_prefix_filepath(
+    prefix, output_filepath = get_prefix_filepath(
         href,
         collection=collection
     )
 
-    # Check if filedir exists and create it if not
-    if not os.path.exists(output_filedir):
-        os.makedirs(output_filedir)
-
     # Check if file already exists to skip double downloading
-    if os.path.exists(output_filepath):
-        return
+    if not os.path.exists(output_filepath):
+        # Download it to current directory
+        s3_client.download_file(
+            collection,
+            prefix,
+            output_filepath,
+            {'RequestPayer': 'requester'}
+        )
 
-    # Download it to current directory
-    s3_client.download_file(
-        collection,
-        prefix,
-        output_filepath,
-        {'RequestPayer': 'requester'}
-    )
+    return output_filepath
 
 
 if __name__ == '__main__':
@@ -134,6 +134,10 @@ if __name__ == '__main__':
         --cloud_cover 1 \
         --download\
         --verbose
+
+    OR
+
+    python satsearch_doberitz.py --band_names b04 b08 --start_date 2020-01-01 --end_date 2020-02-01 --cloud_cover 1 --download --verbose
     """
     load_dotenv('.env')
     s3_client = boto3.client('s3')
@@ -183,24 +187,48 @@ if __name__ == '__main__':
     )
 
     if clargs.verbose:
-        print(f'Combined search: {search.found()} items')
+        info_message(f'Combined search: {search.found()} items')
 
     # Allocate all meta data for acquisition
     items = search.items()
 
     if clargs.verbose:
-        print(items.summary())
+        info_message(items.summary())
+
+    # Allocate MetaData in GeoJSON
+    items_geojson = items.geojson()
+
+    # Log all filepaths to queried scenes
+    filepaths = {}
 
     if clargs.download:
-        # Allocate MetaData in GeoJSON
-        items_geojson = items.geojson()
-
         # Loop over GeoJSON Features
         for feat_ in tqdm(items_geojson['features']):
             # Loop over GeoJSON Bands
+            filepaths[band_name] = []
             for band_name in tqdm(clargs.band_names):
                 # Download the selected bands
-                download_tile_band(feat_['assets'][band_name.upper()]['href'])
+                filepath_ = download_tile_band(
+                    feat_['assets'][band_name.upper()]['href']
+                )
+                filepaths[band_name].append(filepath_)
+    else:
+        # Loop over GeoJSON Features
+        for feat_ in tqdm(items_geojson['features']):
+            # Loop over GeoJSON Bands
+            filepaths[band_name] = []
+            for band_name in tqdm(clargs.band_names):
+                # Download the selected bands
+                href = feat_['assets'][band_name.upper()]['href']
+                _, output_filepath = get_prefix_filepath(
+                    href, collection=clargs.collection
+                )
+                # info_message(output_filepath, os.path.exists(output_filepath))
+                filepaths[band_name].append(output_filepath)
+
+    for key, val in filepaths.items():
+        for fpath_ in filepaths[band_name]:
+            info_message(f"{fpath_} :: {os.path.exists(fpath_)}")
 
     # all_filenames = items.download_assets(requester_pays=True)
     """
@@ -215,10 +243,10 @@ if __name__ == '__main__':
                 collections=['sentinel-s2-l2a']
                 # limit=2
             )
-            print(f'Combined search: {search.found()} items')
+            info_message(f'Combined search: {search.found()} items')
 
             items = search.items()
-            print(items.summary())
+            info_message(items.summary())
 
             if clargs.download:
                 # Download all Assets
@@ -231,7 +259,7 @@ if __name__ == '__main__':
                         # filename_template='assets/${date}/${id}',
                         requester_pays=True
                     )
-                    print(b08_filenames)
+                    info_message(b08_filenames)
 
                     # RED Band
                     b04_filenames = items.download(
@@ -239,7 +267,7 @@ if __name__ == '__main__':
                         # filename_template='assets/${date}/${id}',
                         requester_pays=True
                     )
-                    print(b04_filenames)
+                    info_message(b04_filenames)
 
         except SatSearchError as err:
             warning_message(err)
