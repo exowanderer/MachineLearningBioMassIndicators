@@ -282,6 +282,35 @@ def get_directory_structure(ident='T33UUU', file_ext='.jp2'):
     return file_structure
 
 
+def get_raster_data(file_structure):
+
+    jp2_raster = {}
+    scl_raster = {}
+    scl_data = {}
+    for res_ in [10, 20, 60]:
+        res_dir = f'R{res_}m'
+        jp2_raster[res_dir] = {}
+        filenames_ = file_structure['jp2_filenames'][res_dir]
+        for band_label, fname_ in filenames_.items():
+            if not os.path.exists(fname_):
+                continue
+
+            jp2_raster[res_dir][band_label] = rasterio.open(
+                fname_, driver='JP2OpenJPEG'
+            )
+
+        if not os.path.exists(file_structure['scl_filepath'][res_dir]):
+            continue
+
+        scl_raster[res_dir] = rasterio.open(
+            file_structure['scl_filepath'][res_dir]
+        )
+
+        scl_data[res_dir] = scl_raster[res_dir].read()[0]
+
+    return jp2_raster, scl_raster, scl_data
+
+
 if __name__ == '__main__':
     from argparse import ArgumentParser
     args = ArgumentParser()
@@ -356,16 +385,6 @@ if __name__ == '__main__':
         ident='T33UUU', file_ext='.jp2'
     )
 
-    res_dir = 'R60m'
-
-    jp2_60m_T33UUU_data = {}
-    for band_label, fname_ in files_T33UUU['jp2_filenames'][res_dir].items():
-        jp2_60m_T33UUU_data[band_label] = rasterio.open(
-            fname_, driver='JP2OpenJPEG'
-        )
-
-    scl_60m_T33UUU_raster = rasterio.open(
-        files_T33UUU['scl_filepath'][res_dir]
+    jp2_T33UUU_raster, scl_T33UUU_raster, scl_T33UUU_data = get_raster_data(
+        file_structure=files_T33UUU
     )
-
-    scl_60m_T33UUU_data = scl_60m_T33UUU_raster.read()[0]
