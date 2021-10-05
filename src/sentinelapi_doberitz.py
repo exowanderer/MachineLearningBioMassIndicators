@@ -208,7 +208,7 @@ def download_data(api, scenes, verbose=False):
             info_message(os.listdir(f"sentinelsat/{val['title']}")[0])
 
 
-def get_directory_structure(ident='T33UUU', file_ext='.jp2'):
+def get_directory_structure(ident, file_ext='.jp2'):
     scene_unique_idents = np.unique([
         ident_.split('_')[5] for ident_ in scenes.identifier
     ])
