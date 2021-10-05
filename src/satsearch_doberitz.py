@@ -50,9 +50,6 @@ def bounding_box_coords(gdf):
         max_lon = maxlon_ if maxlon_ > max_lon else max_lon
         max_lat = maxlat_ if maxlat_ > max_lat else max_lat
 
-    # mid_lon = 0.5 * (min_lon + max_lon)
-    # mid_lat = 0.5 * (min_lat + max_lat)
-
     return min_lon, max_lon, min_lat, max_lat
 
 
@@ -93,9 +90,18 @@ def geom_to_bounding_box(gdf):
 
 
 def get_prefix_filepath(href, collection='sentinel-s2-l2a'):
+    """Generate prefix and filepath for boto3 s3 download request.
+
+    Args:
+        href (str): s3 url for single scene from satsearch service
+        collection (str, optional): AWS bucket from which to grab jp2 files. Defaults to 'sentinel-s2-l2a'.
+
+    Returns:
+        tuple (str, str): `prefix` and `output_filepath` for boto3
+    """
     prefix = href.replace(f's3://{collection}/', '')
 
-    filename = prefix[prefix.rfind('/')+1:]  # Remove path
+    filename = prefix[prefix.rfind('/') + 1:]  # Remove path
     dir_resolution = prefix.split('/')[8]
     dir_sector = ''.join(prefix.split('/')[1:4])
     dir_date = '-'.join(prefix.split('/')[4:7])
@@ -319,24 +325,35 @@ if __name__ == '__main__':
             jp2_data[scene_id_][res_][date_][band_name_]['raster'] = raster_
             jp2_data[scene_id_][res_][date_][band_name_]['data'] = rast_data_
 
+    # Compute NDVI for each Scene, Resolution, and Date
     for scene_id_, res_dict_ in jp2_data.items():
         for res_, date_dict_ in res_dict_.items():
             for date_, band_data_ in date_dict_.items():
-                band04_ = band_data_['B04']
-                band08_ = band_data_['B08']
 
+                # Compute NDVI for individual scene, res, date
                 ndvi_masked_, mask_transform_ = compute_ndvi(
-                    band04_,
-                    band08_,
+                    band_data_['B04'],
+                    band_data_['B08'],
                     n_sig=clargs.n_sig
                 )
+
+                # Store the NDVI and masked transform in data struct
                 jp2_data[scene_id_][res_][date_]['ndvi'] = ndvi_masked_
                 jp2_data[scene_id_][res_][date_]['transform'] = mask_transform_
-                plt.figure()
-                plt.hist(
-                    ndvi_masked_.ravel()[(ndvi_masked_.ravel() != 0)],
-                    bins=100
-                )
-                plt.title(f"NDVI Hist: {scene_id_} - {res_} - {date_}")
 
-    plt.show()
+                if clargs.verbose_plot:
+                    # Sanity Check with imshow
+                    plt.figure()
+                    plt.imshow(ndvi_masked_)
+                    plt.title(f"NDVI Image: {scene_id_} - {res_} - {date_}")
+
+                    # Sanity Check with visual histogram
+                    plt.figure()
+                    plt.hist(
+                        ndvi_masked_.ravel()[(ndvi_masked_.ravel() != 0)],
+                        bins=100
+                    )
+                    plt.title(f"NDVI Hist: {scene_id_} - {res_} - {date_}")
+
+    if clargs.verbose_plot:
+        plt.show()
