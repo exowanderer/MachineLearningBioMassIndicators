@@ -80,14 +80,7 @@ def geom_to_bounding_box(gdf):
     }
 
 
-def download_tile_band(href, collection='sentinel-s2-l2a'):
-    """Download a specific S3 file URL
-
-    Args:
-        href (str): S3 file URL
-        collection (str, optional): Earth-AWS collection.
-            Defaults to 'sentinel-s2-l2a'.
-    """
+def get_prefix_filepath(href, collection='sentinel-s2-l2a'):
     prefix = href.replace(f's3://{collection}/', '')
 
     filename = prefix[prefix.rfind('/')+1:]  # Remove path
@@ -96,6 +89,22 @@ def download_tile_band(href, collection='sentinel-s2-l2a'):
 
     output_filedir = os.path.join(collection, dir_sector, dir_date)
     output_filepath = os.path.join(output_filedir, filename)
+
+    return prefix, output_filedir, output_filepath
+
+
+def download_tile_band(href, collection='sentinel-s2-l2a'):
+    """Download a specific S3 file URL
+
+    Args:
+        href (str): S3 file URL
+        collection (str, optional): Earth-AWS collection.
+            Defaults to 'sentinel-s2-l2a'.
+    """
+    prefix, output_filedir, output_filepath = get_prefix_filepath(
+        href,
+        collection=collection
+    )
 
     # Check if filedir exists and create it if not
     if not os.path.exists(output_filedir):
