@@ -1,10 +1,22 @@
+# from logging import warn
 import boto3
 import geopandas as gpd
 import json
+import numpy as np
 import os
 
 from argparse import ArgumentParser
 from dotenv import load_dotenv
+from matplotlib import pyplot as plt
+from statsmodels.robust import scale
+
+from fiona.crs import from_epsg
+import rasterio
+from rasterio import plot
+from rasterio.merge import merge
+from rasterio.mask import mask
+from shapely.geometry import box
+
 from tqdm import tqdm
 
 from satsearch import Search
@@ -84,10 +96,16 @@ def get_prefix_filepath(href, collection='sentinel-s2-l2a'):
     prefix = href.replace(f's3://{collection}/', '')
 
     filename = prefix[prefix.rfind('/')+1:]  # Remove path
+    dir_resolution = prefix.split('/')[8]
     dir_sector = ''.join(prefix.split('/')[1:4])
     dir_date = '-'.join(prefix.split('/')[4:7])
 
-    output_filedir = os.path.join(collection, dir_sector, dir_date)
+    output_filedir = os.path.join(
+        collection,
+        dir_sector,
+        dir_resolution,
+        dir_date
+    )
     output_filepath = os.path.join(output_filedir, filename)
 
     # Check if filedir exists and create it if not
@@ -123,6 +141,52 @@ def download_tile_band(href, collection='sentinel-s2-l2a'):
     return output_filepath
 
 
+def get_coords_from_geometry(gdf):
+    """Function to parse features from GeoDataFrame in such a manner that rasterio wants them"""
+    coords = []
+    for feat_ in json.loads(gdf.to_json())['features']:
+        coords.append(feat_['geometry'])
+    return coords
+
+
+def compute_ndvi(band04, band08, n_sig=10):
+    # Convert from MAD to STD because Using the MAD is
+    #   more agnostic to outliers than STD
+    mad2std = 1.4826
+
+    # By definition, the CRS is identical across bands
+    gdf_crs = gdf_up42_geoms.to_crs(
+        crs=band04['raster'].crs.data
+    )
+
+    coords = get_coords_from_geometry(gdf_crs)
+
+    band04_masked, _ = mask(
+        dataset=band04['raster'],
+        shapes=coords,
+        crop=True
+    )
+    band08_masked, mask_transform = mask(
+        dataset=band08['raster'],
+        shapes=coords,
+        crop=True
+    )
+
+    ndvi_masked = np.true_divide(
+        band08_masked[0] - band04_masked[0],
+        band08_masked[0] + band04_masked[0]
+    )
+
+    ndvi_masked[np.isnan(ndvi_masked)] = 0
+    med_ndvi = np.median(ndvi_masked.ravel())
+    std_ndvi = scale.mad(ndvi_masked.ravel()) * mad2std
+
+    outliers = abs(ndvi_masked - med_ndvi) > n_sig*std_ndvi
+    ndvi_masked[outliers] = med_ndvi
+
+    return ndvi_masked, mask_transform
+
+
 if __name__ == '__main__':
     """
     Use case:
@@ -146,17 +210,19 @@ if __name__ == '__main__':
     args.add_argument(
         '--geojson', type=str, default='doberitz_multipolygon.geojson'
     )
-    args.add_argument('--tile_id', type=str)
+    args.add_argument('--scene_id', type=str)
     args.add_argument('--band_names', nargs='+', default=['B04', 'B08'])
     args.add_argument('--collection', type=str, default='sentinel-s2-l2a')
-    args.add_argument('--start_date', type=str, default='2016-01-01')
-    args.add_argument('--end_date', type=str, default='2022-01-01')
-    args.add_argument('--cloud_cover', type=int, default=10)
+    args.add_argument('--start_date', type=str, default='2020-01-01')
+    args.add_argument('--end_date', type=str, default='2020-02-01')
+    args.add_argument('--cloud_cover', type=int, default=1)
+    args.add_argument('--n_sig', type=float, default=10)
     args.add_argument('--download', action='store_true')
     args.add_argument('--download_all', action='store_true')
     args.add_argument('--verbose', action='store_true')
     clargs = args.parse_args()
 
+    # n_sig = 10
     # Get Sat-Search URL
     url_earth_search = os.environ.get('STAC_API_URL')
 
@@ -200,35 +266,77 @@ if __name__ == '__main__':
 
     # Log all filepaths to queried scenes
     filepaths = {}
-
     if clargs.download:
         # Loop over GeoJSON Features
         for feat_ in tqdm(items_geojson['features']):
             # Loop over GeoJSON Bands
-            filepaths[band_name] = []
-            for band_name in tqdm(clargs.band_names):
+            for band_name_ in tqdm(clargs.band_names):
+                if not band_name_ in filepaths.keys():
+                    filepaths[band_name_] = []
                 # Download the selected bands
                 filepath_ = download_tile_band(
-                    feat_['assets'][band_name.upper()]['href']
+                    feat_['assets'][band_name_.upper()]['href']
                 )
-                filepaths[band_name].append(filepath_)
+                filepaths[band_name_].append(filepath_)
     else:
         # Loop over GeoJSON Features
         for feat_ in tqdm(items_geojson['features']):
             # Loop over GeoJSON Bands
-            filepaths[band_name] = []
-            for band_name in tqdm(clargs.band_names):
+            for band_name_ in tqdm(clargs.band_names):
+                if not band_name_ in filepaths.keys():
+                    filepaths[band_name_] = []
                 # Download the selected bands
-                href = feat_['assets'][band_name.upper()]['href']
+                href = feat_['assets'][band_name_.upper()]['href']
                 _, output_filepath = get_prefix_filepath(
                     href, collection=clargs.collection
                 )
                 # info_message(output_filepath, os.path.exists(output_filepath))
-                filepaths[band_name].append(output_filepath)
+                filepaths[band_name_].append(output_filepath)
 
-    for key, val in filepaths.items():
-        for fpath_ in filepaths[band_name]:
+    jp2_data = {}
+    for band_name_, filepaths_ in filepaths.items():
+        for fpath_ in filepaths_:
+            _, scene_id_, res_, date_, _ = fpath_.split('/')
+            if not os.path.exists(fpath_):
+                warning_message(f"{fpath_} does not exist")
+                continue
+
+            if scene_id_ not in jp2_data.keys():
+                jp2_data[scene_id_] = {}
+            if res_ not in jp2_data[scene_id_].keys():
+                jp2_data[scene_id_][res_] = {}
+            if date_ not in jp2_data[scene_id_][res_].keys():
+                jp2_data[scene_id_][res_][date_] = {}
+            if band_name_ not in jp2_data[scene_id_][res_][date_].keys():
+                jp2_data[scene_id_][res_][date_][band_name_] = {}
+
             info_message(f"{fpath_} :: {os.path.exists(fpath_)}")
+
+            raster_ = rasterio.open(fpath_, driver='JP2OpenJPEG')
+            rast_data_ = raster_.read()
+
+            jp2_data[scene_id_][res_][date_][band_name_]['raster'] = raster_
+            jp2_data[scene_id_][res_][date_][band_name_]['data'] = rast_data_
+
+    for scene_id_, res_dict_ in jp2_data.items():
+        for res_, date_dict_ in res_dict_.items():
+            for date_, band_data_ in date_dict_.items():
+                band04_ = band_data_['B04']
+                band08_ = band_data_['B08']
+
+                ndvi_masked_, mask_transform_ = compute_ndvi(
+                    band04_,
+                    band08_,
+                    n_sig=clargs.n_sig
+                )
+                jp2_data[scene_id_][res_][date_]['ndvi'] = ndvi_masked_
+                jp2_data[scene_id_][res_][date_]['transform'] = mask_transform_
+                plt.figure()
+                plt.hist(
+                    ndvi_masked_.ravel()[(ndvi_masked_.ravel() != 0)],
+                    bins=100
+                )
+                plt.title(f"NDVI Hist: {scene_id_} - {res_} - {date_}")
 
     # all_filenames = items.download_assets(requester_pays=True)
     """
