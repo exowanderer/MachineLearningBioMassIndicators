@@ -237,6 +237,7 @@ if __name__ == '__main__':
         'eo:cloud_cover': {'lt': clargs.cloud_cover}
     }
 
+    band_names = [band_name_.upper() for band_name_ in clargs.band_names]
     # Load geojson into gpd.GeoDataFrame
     gdf_up42_geoms = gpd.read_file(clargs.geojson)
 
@@ -270,7 +271,7 @@ if __name__ == '__main__':
         # Loop over GeoJSON Features
         for feat_ in tqdm(items_geojson['features']):
             # Loop over GeoJSON Bands
-            for band_name_ in tqdm(clargs.band_names):
+            for band_name_ in tqdm(band_names):
                 if not band_name_ in filepaths.keys():
                     filepaths[band_name_] = []
                 # Download the selected bands
@@ -280,9 +281,9 @@ if __name__ == '__main__':
                 filepaths[band_name_].append(filepath_)
     else:
         # Loop over GeoJSON Features
-        for feat_ in tqdm(items_geojson['features']):
+        for feat_ in items_geojson['features']:
             # Loop over GeoJSON Bands
-            for band_name_ in tqdm(clargs.band_names):
+            for band_name_ in band_names:
                 if not band_name_ in filepaths.keys():
                     filepaths[band_name_] = []
                 # Download the selected bands
@@ -290,7 +291,6 @@ if __name__ == '__main__':
                 _, output_filepath = get_prefix_filepath(
                     href, collection=clargs.collection
                 )
-                # info_message(output_filepath, os.path.exists(output_filepath))
                 filepaths[band_name_].append(output_filepath)
 
     jp2_data = {}
@@ -310,7 +310,8 @@ if __name__ == '__main__':
             if band_name_ not in jp2_data[scene_id_][res_][date_].keys():
                 jp2_data[scene_id_][res_][date_][band_name_] = {}
 
-            info_message(f"{fpath_} :: {os.path.exists(fpath_)}")
+            if clargs.verbose:
+                info_message(f"{fpath_} :: {os.path.exists(fpath_)}")
 
             raster_ = rasterio.open(fpath_, driver='JP2OpenJPEG')
             rast_data_ = raster_.read()
@@ -338,6 +339,34 @@ if __name__ == '__main__':
                 )
                 plt.title(f"NDVI Hist: {scene_id_} - {res_} - {date_}")
 
+    # plt.figure()
+    # ndvi_33UUU_2020_01_17 = jp2_data['33UUU']['R10m']['2020-1-17']['ndvi']
+    # ndvi_33UUU_2020_01_24 = jp2_data['33UUU']['R10m']['2020-1-24']['ndvi']
+    # ndvi_32UQD_2020_01_17 = jp2_data['32UQD']['R10m']['2020-1-17']['ndvi']
+    # ndvi_32UQD_2020_01_24 = jp2_data['32UQD']['R10m']['2020-1-24']['ndvi']
+    # plt.hist(
+    #     ndvi_33UUU_2020_01_17.ravel()[(ndvi_33UUU_2020_01_17.ravel() != 0)],
+    #     bins=100,
+    #     alpha=0.5
+    # )
+    # plt.hist(
+    #     ndvi_33UUU_2020_01_24.ravel()[(ndvi_33UUU_2020_01_17.ravel() != 0)],
+    #     bins=100,
+    #     alpha=0.5
+    # )
+    # plt.hist(
+    #     ndvi_32UQD_2020_01_17.ravel()[(ndvi_33UUU_2020_01_17.ravel() != 0)],
+    #     bins=100,
+    #     alpha=0.5
+    # )
+    # plt.hist(
+    #     ndvi_32UQD_2020_01_24.ravel()[(ndvi_33UUU_2020_01_17.ravel() != 0)],
+    #     bins=100,
+    #     alpha=0.5
+    # )
+    # plt.title(f"NDVI Hist: {scene_id_} - {res_} - {date_}")
+
+    plt.show()
     # all_filenames = items.download_assets(requester_pays=True)
     """
     for feat_ in doberitz_feats['features']:
