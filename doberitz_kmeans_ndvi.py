@@ -68,6 +68,8 @@ if __name__ == '__main__':
         quiet=clargs.quiet
     )
 
+    info_message(jp2_data)
+
     info_message("Downloading and acquiring images")
     jp2_data.download_and_acquire_images()
 

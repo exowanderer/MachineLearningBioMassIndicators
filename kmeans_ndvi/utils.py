@@ -366,9 +366,13 @@ def sanity_check_ndvi_statistics(
     """
 
     # Sanity Check with imshow
-    fig = plt.figure()
+    fig, ax = plt.subplots()
     plt.imshow(image, interpolation='None')
     fig.suptitle(f"NDVI Image: {scene_id} - {res} - {date}")
+    # Remove all unnecessary markers from figure
+    ax.grid(False)  # remove grid for images
+    ax.xaxis.set_ticks([])  # remove xticks
+    ax.yaxis.set_ticks([])  # remove xticks
 
     # Sanity Check with visual histogram
     fig = plt.figure()

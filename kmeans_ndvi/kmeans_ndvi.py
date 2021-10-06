@@ -209,14 +209,14 @@ class SentinelAOI(object):
                 # Store the raster in the self.scenes data structure
                 self.scenes[scene_id_][res_][date_][band_name_] = raster_
 
-    def __add__(self, scenes):
+    def __add__(self, instance):
         """Concatenate to this SentinelAOI instance the data from a second
             SentinelAOI instance
 
         Args:
             scenes (SentinelAOI): SentinelAOI instance to be concatenated
         """
-        for scene_id_, res_dict_ in scenes.items():
+        for scene_id_, res_dict_ in instance.scenes.items():
             if not isinstance(res_dict_, dict):
                 # Corner case: if res_dict_ is not a dict
                 self.scenes[scene_id_] = res_dict_
@@ -237,14 +237,14 @@ class SentinelAOI(object):
                         self.scenes[scene_id_][res_][date_][band_name_] = \
                             raster_data_
 
-    def __subtract__(self, scenes):
+    def __sub__(self, instance):
         """Remove the contents of this SentinelAOI instance that correspond to
             a second input SentinelAOI instance
 
         Args:
             scenes (SentinelAOI): SentinelAOI instance to be desequenced
         """
-        for scene_id_, res_dict_ in scenes.items():
+        for scene_id_, res_dict_ in instance.scenes.items():
             if not isinstance(res_dict_, dict):
                 # Corner case: if res_dict_ is not a dict
                 del self.scenes[scene_id_]
@@ -263,6 +263,20 @@ class SentinelAOI(object):
                         # Default behaviour:
                         #   remove current data if it exists in input instance
                         del self.scenes[scene_id_][res_][date_][band_name_]
+
+    def __repr__(self):
+        return "\n".join([
+            "SentinelAOI: ",
+            f"{'AOI: ':>17}{self.geojson}",
+            f"{'Start Date: ':>17}{self.start_date}",
+            f"{'End Date: ':>17}{self.end_date}",
+            f"{'Cloud Cover Max: ':>17}{self.cloud_cover}",
+            f"{'Collection: ':>17}{self.collection}",
+            f"{'Band Names: ':>17}{self.band_names}",
+        ])
+
+    def __str__(self):
+        return self.__repr__()
 
 
 class KMeansNDVI(SentinelAOI):
@@ -425,6 +439,9 @@ class KMeansNDVI(SentinelAOI):
                 used in K-Means when hyperparameter optimizeding.
                 Defaults to None.
         """
+        # Allow user to override n_clusters
+        n_clusters = self.n_clusters if n_clusters is None else n_clusters
+
         scene_iter = tqdm(self.scenes.items(), disable=self.quiet)
         for scene_id_, res_dict_ in scene_iter:
             res_iter = tqdm(res_dict_.items(), disable=self.quiet)
@@ -442,8 +459,7 @@ class KMeansNDVI(SentinelAOI):
                     # Compute K-Means Spatial Clustering per Image
                     kmeans_ = kmeans_spatial_cluster(
                         self.scenes[scene_id_][res_][date_]['ndvi'],
-                        n_clusters=self.n_clusters
-                        if n_clusters is None else n_clusters,
+                        n_clusters=n_clusters,
                         quantile_range=self.quantile_range,
                         verbose=self.verbose,
                         verbose_plot=self.verbose_plot,
@@ -470,6 +486,9 @@ class KMeansNDVI(SentinelAOI):
                 used in K-Means when hyperparameter optimizeding.
                 Defaults to None.
         """
+        # Allow user to override n_clusters
+        n_clusters = self.n_clusters if n_clusters is None else n_clusters
+
         scene_iter = tqdm(self.scenes.items(), disable=self.quiet)
         for scene_id_, res_dict_ in scene_iter:
             res_iter = tqdm(res_dict_.items(), disable=self.quiet)
@@ -486,8 +505,7 @@ class KMeansNDVI(SentinelAOI):
                 # Compute K-Means Spatial Clustering per Image
                 kmeans_ = kmeans_temporal_cluster(
                     date_dict_['timeseries']['ndvi'],
-                    n_clusters=self.n_clusters
-                    if n_clusters is None else n_clusters,
+                    n_clusters=n_clusters,
                     quantile_range=self.quantile_range,
                     verbose=self.verbose,
                     verbose_plot=self.verbose_plot,
