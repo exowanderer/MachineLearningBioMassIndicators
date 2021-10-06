@@ -413,7 +413,7 @@ def sanity_check_temporal_kmeans(
 
     Args:
         kmeans (sklearn.cluster._kmeans.kmeans): object storing kmeans solution
-        image (np.array): image with which kmeans was trains
+        image_stack (np.array): image_stack with which kmeans was trains
         quantile_range (tuple, optional): RobustScaler outlier rejecton
             threshold. Defaults to (1, 99).
     """
@@ -460,8 +460,15 @@ def sanity_check_temporal_kmeans(
     plt.show()
 
 
-def download_and_acquire_images(items_geojson):
+def download_and_acquire_images(items_geojson, band_names=['B04', 'B08']):
+    """Cycle through geoJSON to download files (if download is True) and return list of files for later storage
 
+    Args:
+        items_geojson (gpd.GeoDataFrame): GeoDataFrame storing satsearch query results with href for each s3 tile
+
+    Returns:
+        list: List of file paths for storage in future data structure
+    """
     # Log all filepaths to queried scenes
     if clargs.download:
         # Loop over GeoJSON Features
@@ -496,6 +503,14 @@ def download_and_acquire_images(items_geojson):
 
 
 def load_data_into_struct(filepaths):
+    """Load all files in filepaths into data structure jp2_data
+
+    Args:
+        filepaths (list): List of strings for file allocated from satsearch
+
+    Returns:
+        dict: JSON like dict of all date downloaded via satsearch and boto3
+    """
     # Load all data into JSON data structure
 
     jp2_data = {}
@@ -539,7 +554,19 @@ def load_data_into_struct(filepaths):
 
 
 def compute_ndvi_for_all(jp2_data, n_sig=10, verbose=False, verbose_plot=False):
+    """Cycle over jp2_data and compute NDVI for each scene and date_
 
+    Args:
+        jp2_data (dict): JSON like dict for data structure
+        n_sig (int, optional): number of sigma to compute NDVIs. Defaults to 10.
+        verbose (bool, optional): Allow Info messages to be printed. 
+            Defaults to False.
+        verbose_plot (bool, optional): Allow sanity plots to be displayed. 
+            Defaults to False.
+
+    Returns:
+        dict: Updated jp2_data JSON like dict
+    """
     # Compute NDVI for each Scene, Resolution, and Date
     for scene_id_, res_dict_ in jp2_data.items():
         for res_, date_dict_ in res_dict_.items():
@@ -572,7 +599,14 @@ def compute_ndvi_for_all(jp2_data, n_sig=10, verbose=False, verbose_plot=False):
 
 
 def allocate_ndvi_timeseries(jp2_data):
+    """Allocate NDIV images per scene and date into time series
 
+    Args:
+        jp2_data (dict): JSON like dict for data file_structure
+
+    Returns:
+        dict: Updated jp2_data JSON like dict
+    """
     # Allocate NDVI timeseries for each Scene, Resolution, and Date
     for scene_id_, res_dict_ in jp2_data.items():
         for res_, date_dict_ in res_dict_.items():
@@ -597,7 +631,22 @@ def allocate_ndvi_timeseries(jp2_data):
 def compute_spatial_kmeans(
         jp2_data, n_clusters=5, quantile_range=(1, 99),
         verbose=False, verbose_plot=False):
+    """Cycle through all NDVI and compute spatial K-Means clustering for
 
+    Args:
+        jp2_data (dict): JSON like dict for data structure for
+        n_clusters (int, optional): number of clusters to compute K-Means over. 
+            Defaults to 5.
+        quantile_range (tuple, optional): RobustScaler outlier rejecton 
+            threshold. Defaults to (1, 99).
+        verbose (bool, optional): Allow Info messages to be printed. 
+            Defaults to False.
+        verbose_plot (bool, optional): Allow sanity plots to be displayed. 
+            Defaults to False.
+
+    Returns:
+        dict: Updated jp2_data JSON like dict
+    """
     # Compute NDVI for each Scene, Resolution, and Date
     for scene_id_, res_dict_ in jp2_data.items():
         for res_, date_dict_ in res_dict_.items():
@@ -630,6 +679,22 @@ def compute_spatial_kmeans(
 def compute_temporal_kmeans(
         jp2_data, n_clusters=5, quantile_range=(1, 99),
         verbose=False, verbose_plot=False):
+    """Cycle over all NDVI time series and compute pixel-wise K-Means for
+
+    Args:
+        jp2_data (dict): JSON like dict for data file_structure
+        n_clusters (int, optional): Number of clusters to compute K-Means over. 
+            Defaults to 5.
+        quantile_range (tuple, optional): RobustScaler outlier rejecton 
+            threshold. Defaults to (1, 99).
+        verbose (bool, optional): Allow Info messages to be printed. 
+            Defaults to False.
+        verbose_plot (bool, optional): Allow sanity plots to be displayed. 
+            Defaults to False.
+
+    Returns:
+        dict: Updated jp2_data JSON like dict
+    """
     # Compute NDVI for each Scene, Resolution, and Date
     for scene_id_, res_dict_ in jp2_data.items():
         for res_, date_dict_ in res_dict_.items():
@@ -700,9 +765,6 @@ if __name__ == '__main__':
     # Get Sat-Search URL
     url_earth_search = os.environ.get('STAC_API_URL')
 
-    # Get Input GeoJSON
-    input_geojson = clargs.geojson
-
     # Set Date time start and stop for query
     eo_datetime = f'{clargs.start_date}/{clargs.end_date}'
 
@@ -740,7 +802,9 @@ if __name__ == '__main__':
     items_geojson = items.geojson()
 
     info_message("Downloading and acquiring images")
-    filepaths = download_and_acquire_images(items_geojson)
+    filepaths = download_and_acquire_images(
+        items_geojson, band_names=band_names
+    )
 
     info_message("Loading JP2 files into data structure")
     jp2_data = load_data_into_struct(filepaths)
