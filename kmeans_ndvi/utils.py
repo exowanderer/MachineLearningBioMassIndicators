@@ -20,19 +20,16 @@ ic.configureOutput(includeContext=True)
 
 def info_message(message, end='\n', *args, **kwargs):
     ic.configureOutput(prefix='INFO | ')
-    # print(f'[INFO] {message}', end=end)
     ic(message)
 
 
 def warning_message(message, end='\n', *args, **kwargs):
     ic.configureOutput(prefix='WARNING | ')
-    # print(f'[WARNING] {message}', end=end)
     ic(message)
 
 
 def debug_message(message, end='\n', *args, **kwargs):
     ic.configureOutput(prefix='DEBUG | ')
-    # print(f'[DEBUG] {message}', end=end)
     ic(message)
 
 
@@ -245,10 +242,14 @@ def compute_ndvi(
     med_ndvi = np.median(ndvi_masked.ravel())
     std_ndvi = scale.mad(ndvi_masked.ravel()) * mad2std
 
+    # Identify outliers as points outside nsig x std_ndvi from median
     outliers = abs(ndvi_masked - med_ndvi) > n_sig*std_ndvi
+
+    # Set outliers to median value
     ndvi_masked[outliers] = med_ndvi
 
     if verbose_plot:
+        # Show NDVI image and plot the histogram over its values
         sanity_check_ndvi_statistics(
             ndvi_masked, scene_id, res, date, bins=bins
         )
@@ -292,6 +293,7 @@ def kmeans_spatial_cluster(
     kmeans.fit(pixel_scaled)
 
     if verbose_plot:
+        # Show NDVI cluster images
         sanity_check_spatial_kmeans(
             kmeans, image, quantile_range=quantile_range,
             scene_id=scene_id, res=res, date=date
@@ -315,6 +317,8 @@ def kmeans_temporal_cluster(
     Returns:
         sklearn.cluster._kmeans.KMeans: trained kmeans clustering object
     """
+
+    # Preprocess image data into a sequence of (nonzero) pixels over time
     samples_ = image_stack.reshape(image_stack.shape[0], -1).T
     where_zero = samples_.sum(axis=1) == 0
     samples_ = samples_[~where_zero]
@@ -340,6 +344,7 @@ def kmeans_temporal_cluster(
     kmeans.fit(samples_scaled)
 
     if verbose_plot:
+        # Show NDVI cluster images
         sanity_check_temporal_kmeans(
             kmeans, image_stack, quantile_range=quantile_range,
             scene_id=scene_id, res=res
@@ -348,7 +353,8 @@ def kmeans_temporal_cluster(
     return kmeans
 
 
-def sanity_check_ndvi_statistics(image, scene_id, res, date, bins=100):
+def sanity_check_ndvi_statistics(
+        image, scene_id, res, date, bins=100, plot_now=False):
     """Plot imshow and hist over image
 
     Args:
@@ -368,11 +374,14 @@ def sanity_check_ndvi_statistics(image, scene_id, res, date, bins=100):
     fig = plt.figure()
     plt.hist(image.ravel()[(image.ravel() != 0)], bins=bins)
     fig.suptitle(f"NDVI Hist: {scene_id} - {res} - {date}")
-    plt.show()
+
+    if plot_now:
+        plt.show()
 
 
 def sanity_check_spatial_kmeans(kmeans, image, quantile_range=(1, 99),
-                                scene_id=None, res=None, date=None):
+                                scene_id=None, res=None, date=None,
+                                plot_now=False):
     """Plot imshow of clustering solution as sanity check
 
     Args:
@@ -413,12 +422,14 @@ def sanity_check_spatial_kmeans(kmeans, image, quantile_range=(1, 99),
     )
     fig.suptitle(
         f"Spatial K-Means Reconstruction: {scene_id} - {res} - {date}")
-    plt.show()
+
+    if plot_now:
+        plt.show()
 
 
 def sanity_check_temporal_kmeans(
         kmeans, image_stack, quantile_range=(1, 99),
-        scene_id=None, res=None):
+        scene_id=None, res=None, plot_now=False):
     """Plot imshow of clustering solution as sanity check
 
     Args:
@@ -467,4 +478,6 @@ def sanity_check_temporal_kmeans(
         wspace=1e-2
     )
     fig.suptitle(f"Temporal K-Means Reconstruction: {scene_id} - {res}")
-    plt.show()
+
+    if plot_now:
+        plt.show()

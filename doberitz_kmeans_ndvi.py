@@ -1,5 +1,6 @@
 from argparse import ArgumentParser
 from dotenv import load_dotenv
+from matplotlib import pyplot as plt
 
 # TODO: change from utils to .utils when modularizing
 from kmeans_ndvi import (
@@ -45,6 +46,7 @@ if __name__ == '__main__':
     args.add_argument('--quantile_range', nargs='+', default=(1, 99))
     args.add_argument('--verbose', action='store_true')
     args.add_argument('--verbose_plot', action='store_true')
+    args.add_argument('--quiet', action='store_true')
     clargs = args.parse_args()
 
     load_dotenv(clargs.env_filename)
@@ -63,6 +65,7 @@ if __name__ == '__main__':
         quantile_range=clargs.quantile_range,
         verbose=clargs.verbose,
         verbose_plot=clargs.verbose_plot,
+        quiet=clargs.quiet
     )
 
     info_message("Downloading and acquiring images")
@@ -82,3 +85,6 @@ if __name__ == '__main__':
 
     info_message("Computing temporal K-Means for each scene NDVIs over time")
     jp2_data.compute_temporal_kmeans()
+
+    if clargs.verbose_plot:
+        plt.show()

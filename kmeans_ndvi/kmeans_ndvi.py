@@ -32,7 +32,7 @@ class SentinelAOI(object):
             start_date: str = '2020-01-01', end_date: str = '2020-02-01',
             cloud_cover: int = 1, collection: str = 'sentinel-s2-l2a',
             band_names: list = ['B04', 'B08'], download: bool = False,
-            verbose: bool = False):
+            verbose: bool = False, quiet=False):
         """[summary]
 
         Args:
@@ -62,6 +62,12 @@ class SentinelAOI(object):
         self.band_names = band_names
         self.download = download
         self.verbose = verbose
+        self.quiet = quiet
+
+        if self.quiet:
+            # Force all output to be supressed
+            # Useful when iterating over instances
+            self.verbose = False
 
     def search_earth_aws(self):
         """Organize input parameters and call search query to AWS STAC API
@@ -111,17 +117,21 @@ class SentinelAOI(object):
         if self.verbose:
             info_message(self.items.summary())
 
-        info_message("Allocating metadata in geoJSON")
+        if not self.quiet:
+            info_message("Allocating metadata in geoJSON")
+
         self.items_geojson = self.items.geojson()
 
         # Log all filepaths to queried scenes
         if self.download:
             # Loop over GeoJSON Features
-            for feat_ in tqdm(self.items_geojson['features']):
+            feat_iter = tqdm(
+                self.items_geojson['features'], disable=self.quiet
+            )
+            for feat_ in feat_iter:
                 # Loop over GeoJSON Bands
-                for band_name_ in tqdm(self.band_names):
-                    # if not band_name_ in filepaths.keys():
-                    #     filepaths[band_name_] = []
+                band_iter = tqdm(self.band_names, disable=self.quiet)
+                for band_name_ in band_iter:
                     # Download the selected bands
                     _ = download_tile_band(  # filepath_
                         feat_['assets'][band_name_.upper()]['href'],
@@ -182,6 +192,51 @@ class SentinelAOI(object):
                 raster_['raster'] = rasterio.open(fpath_, driver='JP2OpenJPEG')
                 self.scenes[scene_id_][res_][date_][band_name_] = raster_
 
+    def __add__(self, scenes):
+        """Concatenate to this SentinelAOI instance the data from a second
+            SentinelAOI instance
+
+        Args:
+            scenes (SentinelAOI): SentinelAOI instance to be concatenated
+        """
+        for scene_id_, res_dict_ in scenes.items():
+            if not isinstance(res_dict_, dict):
+                self.scenes[scene_id_] = res_dict_
+                continue
+            for res_, date_dict_ in res_dict_.items():
+                if not isinstance(date_dict_, dict):
+                    self.scenes[scene_id_][res_] = date_dict_
+                    continue
+                for date_, band_data_ in date_dict_.items():
+                    if not isinstance(band_data_, dict):
+                        self.scenes[scene_id_][res_][date_] = band_data_
+                        continue
+                    for band_name_, raster_data_ in band_data_.items():
+                        self.scenes[scene_id_][res_][date_][band_name_] = \
+                            raster_data_
+
+    def __subtract__(self, scenes):
+        """Remove the contents of this SentinelAOI instance that correspond to
+            a second input SentinelAOI instance
+
+        Args:
+            scenes (SentinelAOI): SentinelAOI instance to be desequenced
+        """
+        for scene_id_, res_dict_ in scenes.items():
+            if not isinstance(res_dict_, dict):
+                del self.scenes[scene_id_]
+                continue
+            for res_, date_dict_ in res_dict_.items():
+                if not isinstance(date_dict_, dict):
+                    del self.scenes[scene_id_][res_]
+                    continue
+                for date_, band_data_ in date_dict_.items():
+                    if not isinstance(band_data_, dict):
+                        del self.scenes[scene_id_][res_][date_]
+                        continue
+                    for band_name_, _ in band_data_.items():
+                        del self.scenes[scene_id_][res_][date_][band_name_]
+
 
 class KMeansNDVI(SentinelAOI):
     """Class to contain STAC Sentinel-2 Data Structure
@@ -189,28 +244,36 @@ class KMeansNDVI(SentinelAOI):
 
     def __init__(
             self, geojson: str,
-            start_date: str = '2020-01-01', end_date: str = '2020-02-01',
-            cloud_cover: int = 1, collection: str = 'sentinel-s2-l2a',
-            band_names: list = ['B04', 'B08'], download: bool = False,
-            n_clusters: int = 5, n_sig: int = 10,
-            quantile_range: list = [1, 99], verbose: bool = False,
-            verbose_plot: bool = False, hist_bins: int = 100):
+            start_date: str = '2020-01-01',
+            end_date: str = '2020-02-01',
+            cloud_cover: int = 1,
+            collection: str = 'sentinel-s2-l2a',
+            band_names: list = ['B04', 'B08'],
+            download: bool = False,
+            n_clusters: int = 5,
+            n_sig: int = 10,
+            quantile_range: list = [1, 99],
+            verbose: bool = False,
+            verbose_plot: bool = False,
+            hist_bins: int = 100,
+            quiet: bool = False
+    ):
         """[summary]
 
         Args:
-            geojson (str): filepath to geojson for AOI
+            geojson (str): filepath to geojson for AOI [Inherited]
             start_date (str, optional): start date for STAC query.
-                Defaults to '2020-01-01'.
+                Defaults to '2020-01-01'. [Inherited]
             end_date (str, optional): end date for STAC Query.
-                Defaults to '2020-02-01'.
+                Defaults to '2020-02-01'. [Inherited]
             cloud_cover (int, optional): Percent cloud cover maximum.
-                Defaults to 1.
+                Defaults to 1. [Inherited]
             collection (str, optional): S3 bucket collection for STAC_API_URL.
-                Defaults to 'sentinel-s2-l2a'.
+                Defaults to 'sentinel-s2-l2a'. [Inherited]
             band_names (list, optional): Sentinel-2 band names.
-                Defaults to ['B04', 'B08'].
+                Defaults to ['B04', 'B08']. [Inherited]
             download (bool, optional): Flag whether to initate a download
-                (costs money). Defaults to False.
+                (costs money). Defaults to False. [Inherited]
             n_clusters (int, optional): number of clusters to operate K-Means.
                 Defaults to 5.
             n_sig (int, optional): Number of sigma to flag outliers.
@@ -218,11 +281,12 @@ class KMeansNDVI(SentinelAOI):
             quantile_range (list, optional): Range of distribution to
                 RobustScale. Defaults to [1, 99].
             verbose (bool, optional): Flag whether to output extra print
-                statemetns to stdout. Defaults to False.
+                statemetns to stdout. Defaults to False. [Inherited]
             verbose_plot (bool, optional): Flag whether to display extra
                 matplotlib figures. Defaults to False.
             hist_bins (int, optional): number of bins in matplotlib plt.hist.
                 Defaults to 100.
+            quiet (bool, optional): Flag to turn off all text and visual output
         """
         super().__init__(
             geojson=geojson,
@@ -232,7 +296,8 @@ class KMeansNDVI(SentinelAOI):
             collection=collection,
             band_names=band_names,
             download=download,
-            verbose=verbose
+            verbose=verbose,
+            quiet=quiet
         )
         self.n_clusters = n_clusters
         self.n_sig = n_sig
@@ -240,13 +305,23 @@ class KMeansNDVI(SentinelAOI):
         self.verbose = verbose
         self.verbose_plot = verbose_plot
         self.hist_bins = hist_bins
+        self.quiet = quiet
+
+        if self.quiet:
+            # Force all output to be supressed
+            # Useful when iterating over instances
+            self.verbose = False
+            self.verbose_plot = False
 
     def compute_ndvi_for_all(self):
         """Cycle over self.scenes and compute NDVI for each scene and date_
         """
-        for scene_id_, res_dict_ in tqdm(self.scenes.items()):
-            for res_, date_dict_ in tqdm(res_dict_.items()):
-                for date_, band_data_ in tqdm(date_dict_.items()):
+        scene_iter = tqdm(self.scenes.items(), disable=self.quiet)
+        for scene_id_, res_dict_ in scene_iter:
+            res_iter = tqdm(res_dict_.items(), disable=self.quiet)
+            for res_, date_dict_ in res_iter:
+                date_iter = tqdm(date_dict_.items(), disable=self.quiet)
+                for date_, band_data_ in date_iter:
                     if not 'B04' in band_data_.keys() and \
                             not 'B08' in band_data_.keys():
                         warning_message(
@@ -276,11 +351,14 @@ class KMeansNDVI(SentinelAOI):
     def allocate_ndvi_timeseries(self):
         """Allocate NDIV images per scene and date into time series
         """
-        for scene_id_, res_dict_ in tqdm(self.scenes.items()):
-            for res_, date_dict_ in tqdm(res_dict_.items()):
+        scene_iter = tqdm(self.scenes.items(), disable=self.quiet)
+        for scene_id_, res_dict_ in scene_iter:
+            res_iter = tqdm(res_dict_.items(), disable=self.quiet)
+            for res_, date_dict_ in res_iter:
                 timestamps_ = []
                 timeseries_ = []
-                for date_, dict_ in tqdm(date_dict_.items()):
+                date_iter = tqdm(date_dict_.items(), disable=self.quiet)
+                for date_, dict_ in date_iter:
                     if 'ndvi' not in dict_.keys():
                         continue
 
@@ -300,9 +378,12 @@ class KMeansNDVI(SentinelAOI):
         """Cycle through all NDVI and Compute NDVI for each Scene, Resolution,
             and Date
         """
-        for scene_id_, res_dict_ in tqdm(self.scenes.items()):
-            for res_, date_dict_ in tqdm(res_dict_.items()):
-                for date_, band_data_ in tqdm(date_dict_.items()):
+        scene_iter = tqdm(self.scenes.items(), disable=self.quiet)
+        for scene_id_, res_dict_ in scene_iter:
+            res_iter = tqdm(res_dict_.items(), disable=self.quiet)
+            for res_, date_dict_ in res_iter:
+                date_iter = tqdm(date_dict_.items(), disable=self.quiet)
+                for date_, band_data_ in date_iter:
                     if not 'B04' in band_data_.keys() and \
                             not 'B08' in band_data_.keys():
                         warning_message(
@@ -344,8 +425,10 @@ class KMeansNDVI(SentinelAOI):
         """Cycle over all NDVI time series and Compute NDVI for each Scene,
             Resolution, and Date
         """
-        for scene_id_, res_dict_ in tqdm(self.scenes.items()):
-            for res_, date_dict_ in tqdm(res_dict_.items()):
+        scene_iter = tqdm(self.scenes.items(), disable=self.quiet)
+        for scene_id_, res_dict_ in scene_iter:
+            res_iter = tqdm(res_dict_.items(), disable=self.quiet)
+            for res_, date_dict_ in res_iter:
                 if 'timeseries' not in date_dict_.keys():
                     continue
                 if date_dict_['timeseries']['ndvi'].size == 0:
@@ -366,19 +449,6 @@ class KMeansNDVI(SentinelAOI):
                     scene_id=scene_id_,
                     res=res_
                 )
-
-                # Store the NDVI and masked transform in data struct
-                # self.scenes[scene_id_][res_]['timeseries']['kmeans'] = kmeans_
-
-                # Store the NDVI and masked transform in data struct
-                # if 'kmeans' not in self.scenes[scene_id_][res_]['timeseries']:
-                #     kdict_ = {}
-                # else:
-                #     kdict_ = self.scenes[scene_id_][res_]
-                #     kdict_ = kdict_['timeseries']['kmeans']
-
-                # kdict_[n_clusters] = kmeans_
-                # self.scenes[scene_id_][res_]['timeseries']['kmeans'] = kdict_
 
                 kdict_ = self.scenes[scene_id_][res_]['timeseries']
                 if 'kmeans' not in kdict_.keys():
