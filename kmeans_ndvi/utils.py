@@ -149,7 +149,7 @@ def download_tile_band(href, collection='sentinel-s2-l2a', s3_client=None):
         collection (str, optional): Earth-AWS collection.
             Defaults to 'sentinel-s2-l2a'.
     """
-    assert(s3_client is not None), 'assign s3_client in __main__'
+    assert(s3_client is not None), 'assign s3_client in SentinelAOI instance'
 
     # Use the href to form the boto3 S3 prefix and output file path
     prefix, output_filepath = get_prefix_filepath(
@@ -390,29 +390,35 @@ def sanity_check_spatial_kmeans(kmeans, image, quantile_range=(1, 99),
         quantile_range (tuple, optional): RobustScaler outlier rejecton
             threshold. Defaults to (1, 99).
     """
+    # Preprocess image data
     sclr = RobustScaler(quantile_range=quantile_range)
     pixel_scaled = sclr.fit_transform(image.reshape(-1, 1))
 
-    # cluster_centers = kmeans.cluster_centers_
+    # Predict each cluster value per pixel
     cluster_pred = kmeans.predict(pixel_scaled)
 
-    base_fig_size = 5
+    base_fig_size = 5  # Each sub figure will be base_fig_size x base_fig_size
     fig, axs = plt.subplots(
         ncols=kmeans.n_clusters + 1,
         figsize=(base_fig_size*(kmeans.n_clusters + 1), base_fig_size)
     )
 
+    # Plot the entire cluster_pred image
     axs[0].imshow(cluster_pred.reshape(image.shape), interpolation='None')
+
+    # Cycle through and plot each cluster_pred image per 'class'
     for k in range(kmeans.n_clusters):
         axs[k+1].imshow(
             (cluster_pred == k).reshape(image.shape),
             interpolation='None'
         )
 
+    # Remove all unnecessary markers from figure
     [ax.grid(False) for ax in axs.ravel()]  # remove grid for images
     [ax.xaxis.set_ticks([]) for ax in axs.ravel()]  # remove xticks
     [ax.yaxis.set_ticks([]) for ax in axs.ravel()]  # remove xticks
 
+    # Adjust figure to maximize use of gui box
     plt.subplots_adjust(
         left=0,
         right=1,
@@ -420,10 +426,13 @@ def sanity_check_spatial_kmeans(kmeans, image, quantile_range=(1, 99),
         top=1,
         wspace=1e-2
     )
+
+    # Set title for entire figure
     fig.suptitle(
         f"Spatial K-Means Reconstruction: {scene_id} - {res} - {date}")
 
     if plot_now:
+        # User can override default behaviour and plot on-the-fly
         plt.show()
 
 
@@ -447,29 +456,42 @@ def sanity_check_temporal_kmeans(
     sclr = RobustScaler(quantile_range=quantile_range)
     samples_scaled = sclr.fit_transform(samples_notzero)
 
-    # cluster_centers = kmeans.cluster_centers_
+    # Predict each cluster value per pixel
     cluster_pred = kmeans.predict(samples_scaled)
+
+    # Embedd above image in a zero array to re-constitute zeros
+    #   for the out of mask shape
     cluster_image = np.zeros(samples_.shape[0])
+
+    # Add one to each Class to represent the "out of mask" is class zero
     cluster_image[~where_zero] = cluster_pred + 1
 
-    base_fig_size = 5
+    # Reshape 1D array into 2D image of the original image shape
+    img_shape = image_stack.shape[1:]
+    cluster_image = cluster_image.reshape(img_shape)
+
+    base_fig_size = 5  # Each sub figure will be base_fig_size x base_fig_size
     fig, axs = plt.subplots(
         ncols=kmeans.n_clusters + 2,
         figsize=(base_fig_size*(kmeans.n_clusters + 1), base_fig_size)
     )
 
-    img_shape = image_stack.shape[1:]
-    cluster_image = cluster_image.reshape(img_shape)
-
+    # Plot the entire cluster_pred image
     axs[0].imshow(cluster_image, interpolation='None')
+
+    # Plot the pixels outside the mask, which were not clustered
     axs[1].imshow(cluster_image == 0, interpolation='None')
+
+    # Cycle through and plot each cluster_pred image per 'class'
     for k in range(kmeans.n_clusters):
         axs[k+2].imshow((cluster_image == (k+1)), interpolation='None')
 
+    # Remove all unnecessary markers from figure
     [ax.grid(False) for ax in axs.ravel()]  # remove grid for images
     [ax.xaxis.set_ticks([]) for ax in axs.ravel()]  # remove xticks
     [ax.yaxis.set_ticks([]) for ax in axs.ravel()]  # remove xticks
 
+    # Adjust figure to maximize use of gui box
     plt.subplots_adjust(
         left=0,
         right=1,
@@ -477,7 +499,10 @@ def sanity_check_temporal_kmeans(
         top=1,
         wspace=1e-2
     )
+
+    # Set title for entire figure
     fig.suptitle(f"Temporal K-Means Reconstruction: {scene_id} - {res}")
 
     if plot_now:
+        # User can override default behaviour and plot on-the-fly
         plt.show()

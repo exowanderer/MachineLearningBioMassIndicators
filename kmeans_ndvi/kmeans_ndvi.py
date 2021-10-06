@@ -53,7 +53,8 @@ class SentinelAOI(object):
                 statemetns to stdout. Defaults to False.
         """
         self.scenes = {}  # Data structure for JP2 Data
-        self.s3_client = boto3.client('s3')
+        self.s3_client = boto3.client('s3')  # AWS download client
+
         self.geojson = geojson
         self.start_date = start_date
         self.end_date = end_date
@@ -84,7 +85,7 @@ class SentinelAOI(object):
             'eo:cloud_cover': {'lt': self.cloud_cover}
         }
 
-        # Load geojson into gpd.GeoDataFrame
+        # Load geojson inot gpd.GeoDataFrame
         self.gdf = gpd.read_file(self.geojson)
 
         # Build a GeoJSON bounding box around AOI(s)
@@ -103,9 +104,11 @@ class SentinelAOI(object):
         """Cycle through geoJSON to download files (if download is True)
             and return list of files for later storage
         """
+        # Check if s3_client is properly configured
         assert(self.s3_client is not None), \
             'Please assign and allocate an s3_client'
 
+        # Call and store STAC Sentinel-2 query
         self.search_earth_aws()
 
         if self.verbose:
@@ -120,6 +123,7 @@ class SentinelAOI(object):
         if not self.quiet:
             info_message("Allocating metadata in geoJSON")
 
+        # Store STAC Sentinel-2 query as geoJSON
         self.items_geojson = self.items.geojson()
 
         # Log all filepaths to queried scenes
@@ -137,14 +141,14 @@ class SentinelAOI(object):
                         feat_['assets'][band_name_.upper()]['href'],
                         s3_client=self.s3_client
                     )
-                    # filepaths[band_name_].append(filepath_)
 
-        self.filepaths = {}
         # Loop over GeoJSON Features to Allocate all requested files
+        self.filepaths = {}
         for feat_ in self.items_geojson['features']:
             # Loop over GeoJSON Bands
             for band_name_ in self.band_names:
                 if not band_name_ in self.filepaths.keys():
+                    # Check if this is the first file per band
                     self.filepaths[band_name_] = []
 
                 # Download the selected bands
@@ -152,10 +156,11 @@ class SentinelAOI(object):
                 _, output_filepath = get_prefix_filepath(
                     href, collection=self.collection
                 )
+                # Storoe the file name in a per band structure
                 self.filepaths[band_name_].append(output_filepath)
 
     def load_data_into_struct(self):
-        """Load all files in filepaths into data structure self.scenes
+        """Load all files in filepaths inot data structure self.scenes
         """
 
         for band_name_, filepaths_ in self.filepaths.items():
@@ -163,7 +168,12 @@ class SentinelAOI(object):
             for fpath_ in filepaths_:
                 # loop over file paths
                 if not os.path.exists(fpath_):
-                    warning_message(f"{fpath_} does not exist")
+                    # If a file does not exist, then skip it
+                    warning_message(
+                        f"File Does not exist {fpath_}"
+                        "\n Suggest using --download to acquire it "
+                        "(costs money)"
+                    )
                     continue
 
                 # Use filepath to identify scene_id, res, and date
@@ -171,25 +181,32 @@ class SentinelAOI(object):
 
                 # Adjust month from 1 to 2 digits if necessary
                 year_, month_, day_ = date_.split('-')
-                month_ = f"{month_:0>2}"
-                day_ = f"{day_:0>2}"
+                month_ = f"{month_:0>2}"  # datetime.datetime requires this
+                day_ = f"{day_:0>2}"  # datetime.datetime requires this
                 date_ = f"{year_}-{month_}-{day_}"
 
                 # Build up data structure for easier access later
                 if scene_id_ not in self.scenes.keys():
+                    # Set scenes are blank dict per scene
                     self.scenes[scene_id_] = {}
                 if res_ not in self.scenes[scene_id_].keys():
+                    # Set resolutions dict are blank dict per resolution
                     self.scenes[scene_id_][res_] = {}
                 if date_ not in self.scenes[scene_id_][res_].keys():
+                    # Set dates dict are blank dict per date
                     self.scenes[scene_id_][res_][date_] = {}
                 if band_name_ not in self.scenes[scene_id_][res_][date_].keys():
+                    # Set band dict are blank dict per band
                     self.scenes[scene_id_][res_][date_][band_name_] = {}
 
                 if self.verbose:
                     info_message(f"{fpath_} :: {os.path.exists(fpath_)}")
 
-                raster_ = {}
+                # Load the JP2 file
+                raster_ = {}  # Aid to maintain 79 characters per line
                 raster_['raster'] = rasterio.open(fpath_, driver='JP2OpenJPEG')
+
+                # Store the raster in the self.scenes data structure
                 self.scenes[scene_id_][res_][date_][band_name_] = raster_
 
     def __add__(self, scenes):
@@ -201,17 +218,22 @@ class SentinelAOI(object):
         """
         for scene_id_, res_dict_ in scenes.items():
             if not isinstance(res_dict_, dict):
+                # Corner case: if res_dict_ is not a dict
                 self.scenes[scene_id_] = res_dict_
                 continue
             for res_, date_dict_ in res_dict_.items():
                 if not isinstance(date_dict_, dict):
+                    # Corner case: if date_dict_ is not a dict
                     self.scenes[scene_id_][res_] = date_dict_
                     continue
                 for date_, band_data_ in date_dict_.items():
                     if not isinstance(band_data_, dict):
+                        # Corner case: if band_data_ is not a dict
                         self.scenes[scene_id_][res_][date_] = band_data_
                         continue
                     for band_name_, raster_data_ in band_data_.items():
+                        # Default behaviour:
+                        #   save input instance raster_data_ to current instance
                         self.scenes[scene_id_][res_][date_][band_name_] = \
                             raster_data_
 
@@ -224,17 +246,22 @@ class SentinelAOI(object):
         """
         for scene_id_, res_dict_ in scenes.items():
             if not isinstance(res_dict_, dict):
+                # Corner case: if res_dict_ is not a dict
                 del self.scenes[scene_id_]
                 continue
             for res_, date_dict_ in res_dict_.items():
                 if not isinstance(date_dict_, dict):
+                    # Corner case: if date_dict_ is not a dict
                     del self.scenes[scene_id_][res_]
                     continue
                 for date_, band_data_ in date_dict_.items():
                     if not isinstance(band_data_, dict):
+                        # Corner case: if band_data_ is not a dict
                         del self.scenes[scene_id_][res_][date_]
                         continue
                     for band_name_, _ in band_data_.items():
+                        # Default behaviour:
+                        #   remove current data if it exists in input instance
                         del self.scenes[scene_id_][res_][date_][band_name_]
 
 
@@ -316,6 +343,7 @@ class KMeansNDVI(SentinelAOI):
     def compute_ndvi_for_all(self):
         """Cycle over self.scenes and compute NDVI for each scene and date_
         """
+        # Behaviour disable=self.quiet allows user to turn off tqdm via CLI
         scene_iter = tqdm(self.scenes.items(), disable=self.quiet)
         for scene_id_, res_dict_ in scene_iter:
             res_iter = tqdm(res_dict_.items(), disable=self.quiet)
@@ -345,29 +373,43 @@ class KMeansNDVI(SentinelAOI):
                     )
 
                     # Store the NDVI and masked transform in data struct
-                    self.scenes[scene_id_][res_][date_]['ndvi'] = ndvi_masked_
-                    self.scenes[scene_id_][res_][date_]['transform'] = mask_transform_
+                    # Behaviour below used to maintain 79 characters per line
+                    date_dict_ = self.scenes[scene_id_][res_][date_]
+                    date_dict_['ndvi'] = ndvi_masked_
+                    date_dict_['transform'] = mask_transform_
+
+                    self.scenes[scene_id_][res_][date_] = date_dict_
 
     def allocate_ndvi_timeseries(self):
-        """Allocate NDIV images per scene and date into time series
+        """Allocate NDVI images per scene and date inot time series
         """
         scene_iter = tqdm(self.scenes.items(), disable=self.quiet)
         for scene_id_, res_dict_ in scene_iter:
             res_iter = tqdm(res_dict_.items(), disable=self.quiet)
             for res_, date_dict_ in res_iter:
-                timestamps_ = []
-                timeseries_ = []
+                timestamps_ = []  # Create blank list for datetime stampes
+                timeseries_ = []  # Create blank list for NDVI data
                 date_iter = tqdm(date_dict_.items(), disable=self.quiet)
                 for date_, dict_ in date_iter:
                     if 'ndvi' not in dict_.keys():
+                        warning_message(
+                            f"{scene_id_} - {res_} - {date_}: " + "\n"
+                            f"'ndvi' not in date_dict_[{date_}].keys()"
+                        )
                         continue
 
                     if date_ != 'timeseries':
+                        # Append this time stamp to timestamps_ list
                         timestamps_.append(datetime.fromisoformat(date_))
+
+                        # Append this NDVI to timeseries_ list
                         timeseries_.append(dict_['ndvi'])
 
+                # Redefine the list of arrays to an array of arrays (image cube)
                 timeseries_ = np.array(timeseries_)
 
+                # store in 'timeseries' dict inside self.scenes data structure
+                # Behaviour below used to maintain 79 characters per line
                 timeseries_dict = {}
                 timeseries_dict['ndvi'] = timeseries_
                 timeseries_dict['timestamps'] = timestamps_
@@ -377,6 +419,11 @@ class KMeansNDVI(SentinelAOI):
     def compute_spatial_kmeans(self, n_clusters=None):
         """Cycle through all NDVI and Compute NDVI for each Scene, Resolution,
             and Date
+
+        Args:
+            n_clusters (int, optional): Allow user to override the n_clusters
+                used in K-Means when hyperparameter optimizeding.
+                Defaults to None.
         """
         scene_iter = tqdm(self.scenes.items(), disable=self.quiet)
         for scene_id_, res_dict_ in scene_iter:
@@ -405,15 +452,8 @@ class KMeansNDVI(SentinelAOI):
                         date=date_
                     )
 
-                    # # Store the NDVI and masked transform in data struct
-                    # if 'kmeans' not in self.scenes[scene_id_][res_][date_]:
-                    #     kdict_ = {}
-                    # else:
-                    #     kdict_ = self.scenes[scene_id_][res_][date_]['kmeans']
-
-                    # if n_clusters in kdict_.keys():
-                    #     del kdict_[n_clusters]
-
+                    # Store the result in the self.scenes data structure
+                    # This behaviour is used to maintaint 79 characters per line
                     kdict_ = self.scenes[scene_id_][res_][date_]
                     if 'kmeans' not in kdict_.keys():
                         kdict_['kmeans'] = {}
@@ -424,6 +464,11 @@ class KMeansNDVI(SentinelAOI):
     def compute_temporal_kmeans(self, n_clusters=None):
         """Cycle over all NDVI time series and Compute NDVI for each Scene,
             Resolution, and Date
+
+        Args:
+            n_clusters (int, optional): Allow user to override the n_clusters
+                used in K-Means when hyperparameter optimizeding.
+                Defaults to None.
         """
         scene_iter = tqdm(self.scenes.items(), disable=self.quiet)
         for scene_id_, res_dict_ in scene_iter:
@@ -450,6 +495,8 @@ class KMeansNDVI(SentinelAOI):
                     res=res_
                 )
 
+                # Store the result in the self.scenes data structure
+                # This behaviour is used to maintaint 79 characters per line
                 kdict_ = self.scenes[scene_id_][res_]['timeseries']
                 if 'kmeans' not in kdict_.keys():
                     kdict_['kmeans'] = {}
