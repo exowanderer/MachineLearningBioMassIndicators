@@ -500,6 +500,7 @@ def load_data_into_struct(filepaths):
             # Adjust month from 1 to 2 digits if necessary
             year_, month_, day_ = date_.split('-')
             month_ = f"{month_:0>2}"
+            day_ = f"{day_:0>2}"
             date_ = f"{year_}-{month_}-{day_}"
 
             # Build up data structure for easier access later
