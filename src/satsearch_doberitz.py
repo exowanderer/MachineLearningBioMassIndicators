@@ -187,7 +187,7 @@ def get_coords_from_geometry(gdf):
 
 
 def compute_ndvi(
-        band04, band08, n_sig=10, verbose_plot=False,
+        band04, band08, n_sig=10, verbose=False, verbose_plot=False,
         scene_id=None, res=None, date=None, bins=100):
     """Compute the NDVI image from band08 and band04 values
 
@@ -252,7 +252,8 @@ def compute_ndvi(
 
 def kmeans_spatial_cluster(
         image, n_clusters=5, quantile_range=(1, 99),
-        verbose=False, verbose_plot=False):
+        verbose=False, verbose_plot=False,
+        scene_id=None, res=None, date=None):
     """Compute kmeans clustering spatially over image as grey scale levels
 
     Args:
@@ -286,7 +287,8 @@ def kmeans_spatial_cluster(
 
     if verbose_plot:
         sanity_check_spatial_kmeans(
-            kmeans, image, quantile_range=quantile_range
+            kmeans, image, quantile_range=quantile_range,
+            scene_id=scene_id, res=res, date=date
         )
 
     return kmeans
@@ -294,7 +296,8 @@ def kmeans_spatial_cluster(
 
 def kmeans_temporal_cluster(
         image_stack, n_clusters=5, quantile_range=(1, 99),
-        verbose=False, verbose_plot=False):
+        verbose=False, verbose_plot=False,
+        scene_id=None, res=None):
     """Compute kmeans clustering spatially over image as grey scale levels
 
     Args:
@@ -332,7 +335,8 @@ def kmeans_temporal_cluster(
 
     if verbose_plot:
         sanity_check_temporal_kmeans(
-            kmeans, image_stack, quantile_range=quantile_range
+            kmeans, image_stack, quantile_range=quantile_range,
+            scene_id=scene_id, res=res
         )
 
     return kmeans
@@ -348,20 +352,21 @@ def sanity_check_ndvi_statistics(image, scene_id, res, date, bins=100):
         date (str): Sentinel-2A L2A acquistion datetime
         bins (int, optional): Number of bins for histogram. Defaults to 100.
     """
+
     # Sanity Check with imshow
-    plt.figure()
+    fig = plt.figure()
     plt.imshow(image)
-    plt.title(f"NDVI Image: {scene_id} - {res} - {date}")
+    fig.suptitle(f"NDVI Image: {scene_id} - {res} - {date}")
 
     # Sanity Check with visual histogram
-    plt.figure()
+    fig = plt.figure()
     plt.hist(image.ravel()[(image.ravel() != 0)], bins=bins)
-    plt.title(f"NDVI Hist: {scene_id} - {res} - {date}")
+    fig.suptitle(f"NDVI Hist: {scene_id} - {res} - {date}")
     plt.show()
 
 
-def sanity_check_spatial_kmeans(
-        kmeans, image, quantile_range=(1, 99)):
+def sanity_check_spatial_kmeans(kmeans, image, quantile_range=(1, 99),
+                                scene_id=None, res=None, date=None):
     """Plot imshow of clustering solution as sanity check
 
     Args:
@@ -376,14 +381,19 @@ def sanity_check_spatial_kmeans(
     # cluster_centers = kmeans.cluster_centers_
     cluster_pred = kmeans.predict(pixel_scaled)
 
-    _, axs = plt.subplots(
+    base_fig_size = 5
+    fig, axs = plt.subplots(
         ncols=kmeans.n_clusters + 1,
-        figsize=(10*(kmeans.n_clusters + 1), 10)
+        figsize=(base_fig_size*(kmeans.n_clusters + 1), base_fig_size)
     )
 
     axs[0].imshow(cluster_pred.reshape(image.shape))
     for k in range(kmeans.n_clusters):
         axs[k+1].imshow((cluster_pred == k).reshape(image.shape))
+
+    [ax.grid(False) for ax in axs.ravel()]  # remove grid for images
+    [ax.xaxis.set_ticks([]) for ax in axs.ravel()]  # remove xticks
+    [ax.yaxis.set_ticks([]) for ax in axs.ravel()]  # remove xticks
 
     plt.subplots_adjust(
         left=0,
@@ -392,11 +402,13 @@ def sanity_check_spatial_kmeans(
         top=1,
         wspace=1e-2
     )
+    fig.suptitle(f"Spatial Kmeans Reconstruction: {scene_id} - {res} - {date}")
     plt.show()
 
 
 def sanity_check_temporal_kmeans(
-        kmeans, image_stack, quantile_range=(1, 99)):
+        kmeans, image_stack, quantile_range=(1, 99),
+        scene_id=None, res=None):
     """Plot imshow of clustering solution as sanity check
 
     Args:
@@ -420,7 +432,7 @@ def sanity_check_temporal_kmeans(
     cluster_image[~where_zero] = cluster_pred + 1
 
     base_fig_size = 5
-    _, axs = plt.subplots(
+    fig, axs = plt.subplots(
         ncols=kmeans.n_clusters + 2,
         figsize=(base_fig_size*(kmeans.n_clusters + 1), base_fig_size)
     )
@@ -444,6 +456,7 @@ def sanity_check_temporal_kmeans(
         top=1,
         wspace=1e-2
     )
+    fig.suptitle(f"Temporal Kmeans Reconstruction: {scene_id} - {res}")
     plt.show()
 
 
@@ -484,7 +497,7 @@ def download_and_acquire_images(items_geojson):
 
 def load_data_into_struct(filepaths):
     # Load all data into JSON data structure
-    debug_message(f"filepaths.keys():{filepaths.keys()}")
+
     jp2_data = {}
     for band_name_, filepaths_ in filepaths.items():
         # loop over band names
@@ -525,7 +538,7 @@ def load_data_into_struct(filepaths):
     return jp2_data
 
 
-def compute_ndvi_for_all(jp2_data, n_sig=10):
+def compute_ndvi_for_all(jp2_data, n_sig=10, verbose=False, verbose_plot=False):
 
     # Compute NDVI for each Scene, Resolution, and Date
     for scene_id_, res_dict_ in jp2_data.items():
@@ -538,7 +551,6 @@ def compute_ndvi_for_all(jp2_data, n_sig=10):
                     )
                     continue
 
-                debug_message(f"band_data_.keys():{band_data_.keys()}")
                 # Compute NDVI for individual scene, res, date
                 ndvi_masked_, mask_transform_ = compute_ndvi(
                     band_data_['B04'],
@@ -547,22 +559,14 @@ def compute_ndvi_for_all(jp2_data, n_sig=10):
                     scene_id=scene_id_,
                     res=res_,
                     date=date_,
-                    bins=100
+                    bins=100,
+                    verbose=verbose,
+                    verbose_plot=verbose_plot
                 )
-
-                # # Compute K-Means Spatial Clustering per Image
-                # kmeans_ = kmeans_spatial_cluster(
-                #     ndvi_masked_,
-                #     n_clusters=5,
-                #     quantile_range=(1, 99),
-                #     verbose=clargs.verbose,
-                #     verbose_plot=clargs.verbose_plot
-                # )
 
                 # Store the NDVI and masked transform in data struct
                 jp2_data[scene_id_][res_][date_]['ndvi'] = ndvi_masked_
                 jp2_data[scene_id_][res_][date_]['transform'] = mask_transform_
-                # jp2_data[scene_id_][res_][date_]['kmeans_spatial'] = kmeans_
 
     return jp2_data
 
@@ -590,7 +594,9 @@ def allocate_ndvi_timeseries(jp2_data):
     return jp2_data
 
 
-def compute_spatial_kmeans(jp2_data):
+def compute_spatial_kmeans(
+        jp2_data, n_clusters=5, quantile_range=(1, 99),
+        verbose=False, verbose_plot=False):
 
     # Compute NDVI for each Scene, Resolution, and Date
     for scene_id_, res_dict_ in jp2_data.items():
@@ -606,10 +612,13 @@ def compute_spatial_kmeans(jp2_data):
                 # Compute K-Means Spatial Clustering per Image
                 kmeans_ = kmeans_spatial_cluster(
                     jp2_data[scene_id_][res_][date_]['ndvi'],
-                    n_clusters=5,
-                    quantile_range=(1, 99),
-                    verbose=clargs.verbose,
-                    verbose_plot=clargs.verbose_plot
+                    n_clusters=n_clusters,
+                    quantile_range=quantile_range,
+                    verbose=verbose,
+                    verbose_plot=verbose_plot,
+                    scene_id=scene_id_,
+                    res=res_,
+                    date=date_
                 )
 
                 # Store the NDVI and masked transform in data struct
@@ -618,7 +627,9 @@ def compute_spatial_kmeans(jp2_data):
     return jp2_data
 
 
-def compute_temporal_kmeans(jp2_data):
+def compute_temporal_kmeans(
+        jp2_data, n_clusters=5, quantile_range=(1, 99),
+        verbose=False, verbose_plot=False):
     # Compute NDVI for each Scene, Resolution, and Date
     for scene_id_, res_dict_ in jp2_data.items():
         for res_, date_dict_ in res_dict_.items():
@@ -633,10 +644,12 @@ def compute_temporal_kmeans(jp2_data):
             # Compute K-Means Spatial Clustering per Image
             kmeans_ = kmeans_temporal_cluster(
                 date_dict_['timeseries']['ndvi'],
-                n_clusters=5,
-                quantile_range=(1, 99),
-                verbose=clargs.verbose,
-                verbose_plot=clargs.verbose_plot
+                n_clusters=n_clusters,
+                quantile_range=quantile_range,
+                verbose=verbose,
+                verbose_plot=verbose_plot,
+                scene_id=scene_id_,
+                res=res_
             )
 
             # Store the NDVI and masked transform in data struct
@@ -723,11 +736,36 @@ if __name__ == '__main__':
     if clargs.verbose:
         info_message(items.summary())
 
-    # Allocate MetaData in GeoJSON
+    info_message("Allocating metadata in geoJSON")
     items_geojson = items.geojson()
+
+    info_message("Downloading and acquiring images")
     filepaths = download_and_acquire_images(items_geojson)
+
+    info_message("Loading JP2 files into data structure")
     jp2_data = load_data_into_struct(filepaths)
-    jp2_data = compute_ndvi_for_all(jp2_data, n_sig=clargs.n_sig)
+
+    info_message("Computing NDVI for all scenes")
+    jp2_data = compute_ndvi_for_all(
+        jp2_data,
+        n_sig=clargs.n_sig,
+        verbose=clargs.verbose,
+        verbose_plot=clargs.verbose_plot
+    )
+
+    info_message("Allocating NDVI time series")
     jp2_data = allocate_ndvi_timeseries(jp2_data)
-    jp2_data = compute_spatial_kmeans(jp2_data)
-    jp2_data = compute_temporal_kmeans(jp2_data)
+
+    info_message("Computing spatial K-Means for each scene NDVI")
+    jp2_data = compute_spatial_kmeans(
+        jp2_data,
+        verbose=clargs.verbose,
+        verbose_plot=clargs.verbose_plot
+    )
+
+    info_message("Computing temporal K-Means for each scene NDVIs over time")
+    jp2_data = compute_temporal_kmeans(
+        jp2_data,
+        verbose=clargs.verbose,
+        verbose_plot=clargs.verbose_plot
+    )
