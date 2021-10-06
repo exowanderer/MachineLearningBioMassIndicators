@@ -26,34 +26,45 @@ from .utils import (
 
 
 class KMeansNDVI(object):
-    """[summary]
-
-    Args:
-        object ([type]): [description]
+    """Class to contain STAC Sentinel-2 Data Structure
     """
 
     def __init__(
-            self, geojson, start_date='2020-01-01', end_date='2020-02-01',
-            cloud_cover=1, collection='sentinel-s2-l2a',
-            band_names=['B04', 'B08'], download=False, n_clusters=5, n_sig=10,
-            quantile_range=(1, 99), verbose=False, verbose_plot=False,
-            hist_bins=100):
+            self, geojson: str,
+            start_date: str = '2020-01-01', end_date: str = '2020-02-01',
+            cloud_cover: int = 1, collection: str = 'sentinel-s2-l2a',
+            band_names: list = ['B04', 'B08'], download: bool = False,
+            n_clusters: int = 5, n_sig: int = 10,
+            quantile_range: list = [1, 99], verbose: bool = False,
+            verbose_plot: bool = False, hist_bins: int = 100):
         """[summary]
 
         Args:
-            geojson ([type]): [description]
-            start_date (str, optional): [description]. Defaults to '2020-01-01'.
-            end_date (str, optional): [description]. Defaults to '2020-02-01'.
-            cloud_cover (int, optional): [description]. Defaults to 1.
-            collection (str, optional): [description]. Defaults to 'sentinel-s2-l2a'.
-            band_names (list, optional): [description]. Defaults to ['B04', 'B08'].
-            download (bool, optional): [description]. Defaults to False.
-            n_clusters (int, optional): [description]. Defaults to 5.
-            n_sig (int, optional): [description]. Defaults to 10.
-            quantile_range (tuple, optional): [description]. Defaults to (1, 99).
-            verbose (bool, optional): [description]. Defaults to False.
-            verbose_plot (bool, optional): [description]. Defaults to False.
-            hist_bins (int, optional): [description]. Defaults to 100.
+            geojson (str): filepath to geojson for AOI
+            start_date (str, optional): start date for STAC query.
+                Defaults to '2020-01-01'.
+            end_date (str, optional): end date for STAC Query.
+                Defaults to '2020-02-01'.
+            cloud_cover (int, optional): Percent cloud cover maximum.
+                Defaults to 1.
+            collection (str, optional): S3 bucket collection for STAC_API_URL.
+                Defaults to 'sentinel-s2-l2a'.
+            band_names (list, optional): Sentinel-2 band names.
+                Defaults to ['B04', 'B08'].
+            download (bool, optional): Flag whether to initate a download
+                (costs money). Defaults to False.
+            n_clusters (int, optional): number of clusters to operate K-Means.
+                Defaults to 5.
+            n_sig (int, optional): Number of sigma to flag outliers.
+                Defaults to 10.
+            quantile_range (list, optional): Range of distribution to
+                RobustScale. Defaults to [1, 99].
+            verbose (bool, optional): Flag whether to output extra print
+                statemetns to stdout. Defaults to False.
+            verbose_plot (bool, optional): Flag whether to display extra
+                matplotlib figures. Defaults to False.
+            hist_bins (int, optional): number of bins in matplotlib plt.hist.
+                Defaults to 100.
         """
         self.scenes = {}  # Data structure for JP2 Data
         self.s3_client = boto3.client('s3')
@@ -72,7 +83,7 @@ class KMeansNDVI(object):
         self.hist_bins = hist_bins
 
     def search_earth_aws(self):
-        """[summary]
+        """Organize input parameters and call search query to AWS STAC API
         """
 
         # Get Sat-Search URL
@@ -102,7 +113,8 @@ class KMeansNDVI(object):
         )
 
     def download_and_acquire_images(self):
-        """Cycle through geoJSON to download files (if download is True) and return list of files for later storage
+        """Cycle through geoJSON to download files (if download is True)
+            and return list of files for later storage
         """
         assert(self.s3_client is not None), \
             'Please assign and allocate an s3_client'
@@ -198,7 +210,8 @@ class KMeansNDVI(object):
                     if not 'B04' in band_data_.keys() and \
                             not 'B08' in band_data_.keys():
                         warning_message(
-                            'NDVI cannot be computed without both Band04 and Band08'
+                            'NDVI cannot be computed without '
+                            'both Band04 and Band08'
                         )
                         continue
 
@@ -243,8 +256,8 @@ class KMeansNDVI(object):
 
                 self.scenes[scene_id_][res_]['timeseries'] = timeseries_dict
 
-    def compute_spatial_kmeans(self):
-        """Cycle through all NDVI and Compute NDVI for each Scene, Resolution, 
+    def compute_spatial_kmeans(self, n_clusters=None):
+        """Cycle through all NDVI and Compute NDVI for each Scene, Resolution,
             and Date
         """
         for scene_id_, res_dict_ in tqdm(self.scenes.items()):
@@ -253,14 +266,16 @@ class KMeansNDVI(object):
                     if not 'B04' in band_data_.keys() and \
                             not 'B08' in band_data_.keys():
                         warning_message(
-                            'NDVI cannot be computed without both Band04 and Band08'
+                            'NDVI cannot be computed without both '
+                            'Band04 and Band08'
                         )
                         continue
 
                     # Compute K-Means Spatial Clustering per Image
                     kmeans_ = kmeans_spatial_cluster(
                         self.scenes[scene_id_][res_][date_]['ndvi'],
-                        n_clusters=self.n_clusters,
+                        n_clusters=self.n_clusters
+                        if n_clusters is None else n_clusters,
                         quantile_range=self.quantile_range,
                         verbose=self.verbose,
                         verbose_plot=self.verbose_plot,
@@ -272,7 +287,7 @@ class KMeansNDVI(object):
                     # Store the NDVI and masked transform in data struct
                     self.scenes[scene_id_][res_][date_]['kmeans'] = kmeans_
 
-    def compute_temporal_kmeans(self):
+    def compute_temporal_kmeans(self, n_clusters=None):
         """Cycle over all NDVI time series and Compute NDVI for each Scene,
             Resolution, and Date
         """
@@ -282,14 +297,16 @@ class KMeansNDVI(object):
                     continue
                 if date_dict_['timeseries']['ndvi'].size == 0:
                     warning_message(
-                        f'Temporal NDVI does not exist for {scene_id_} at {res_}'
+                        f'Temporal NDVI does not exist for '
+                        f'{scene_id_} at {res_}'
                     )
                     continue
 
                 # Compute K-Means Spatial Clustering per Image
                 kmeans_ = kmeans_temporal_cluster(
                     date_dict_['timeseries']['ndvi'],
-                    n_clusters=self.n_clusters,
+                    n_clusters=self.n_clusters
+                    if n_clusters is None else n_clusters,
                     quantile_range=self.quantile_range,
                     verbose=self.verbose,
                     verbose_plot=self.verbose_plot,
