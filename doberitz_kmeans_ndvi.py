@@ -1,32 +1,5 @@
-# # from logging import warn
-# from logging import debug, warning
-# import boto3
-# import geopandas as gpd
-# import json
-# import numpy as np
-# import os
-# import rasterio
-
 from argparse import ArgumentParser
-# from datetime import datetime
 from dotenv import load_dotenv
-# from matplotlib import pyplot as plt
-# from tqdm import tqdm
-
-# from sklearn.cluster import KMeans, MiniBatchKMeans
-# from sklearn.preprocessing import RobustScaler, MinMaxScaler
-# from sklearn.model_selection import train_test_split
-# from statsmodels.robust import scale
-
-# # from fiona.crs import from_epsg
-# # from rasterio import plot
-# # from rasterio.merge import merge
-# from rasterio.mask import mask
-# # from shapely.geometry import box
-# from satsearch import Search
-# # from satsearch.search import SatSearchError
-
-# from kmeans_ndvi import *
 
 # TODO: change from utils to .utils when modularizing
 from kmeans_ndvi import (
@@ -38,10 +11,10 @@ from kmeans_ndvi import (
 
 
 if __name__ == '__main__':
-    """
+    example_usage = """
     Use case:
 
-    python satsearch_doberitz.py \
+    python doberitz_kmeans_ndvi.py \
         --band_names b04 b08\
         --start_date 2020-01-01 \
         --end_date 2020-02-01 \
@@ -52,9 +25,10 @@ if __name__ == '__main__':
 
     OR
 
-    python satsearch_doberitz.py --band_names b04 b08 --start_date 2020-01-01 --end_date 2020-02-01 --cloud_cover 1 --download --verbose --verbose_plot
+    python doberitz_kmeans_ndvi.py --band_names b04 b08 --start_date 2020-01-01 --end_date 2020-02-01 --cloud_cover 1 --download --verbose --verbose_plot
     """
-    args = ArgumentParser()
+
+    args = ArgumentParser(prog='Doberitz K-Means NDVI')
     args.add_argument(
         '--geojson', type=str, default='doberitz_multipolygon.geojson'
     )
