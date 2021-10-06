@@ -1,15 +1,15 @@
 # from logging import warn
 from logging import debug, warning
-import boto3
+# import boto3
 import geopandas as gpd
 import json
 import numpy as np
 import os
 import rasterio
 
-from argparse import ArgumentParser
+# from argparse import ArgumentParser
 from datetime import datetime
-from dotenv import load_dotenv
+# from dotenv import load_dotenv
 from matplotlib import pyplot as plt
 from tqdm import tqdm
 
@@ -27,7 +27,7 @@ from satsearch import Search
 # from satsearch.search import SatSearchError
 
 # TODO: change from utils to .utils when modularizing
-from utils import info_message, warning_message, debug_message
+from .utils import info_message, warning_message, debug_message
 
 
 def bounding_box_coords(gdf):
@@ -766,10 +766,10 @@ def search_earth_aws(
     }
 
     # Load geojson into gpd.GeoDataFrame
-    gdf_up42_geoms = gpd.read_file(geojson)
+    gdf = gpd.read_file(geojson)
 
     # Build a GeoJSON bounding box around AOI(s)
-    bounding_box = geom_to_bounding_box(gdf_up42_geoms)
+    bounding_box = geom_to_bounding_box(gdf)
 
     # Use Sat-Search to idenitify and load all meta data within search field
     search = Search(
@@ -780,9 +780,12 @@ def search_earth_aws(
         collections=[collection]
     )
 
+    return search, gdf
 
+
+"""
 if __name__ == '__main__':
-    """
+    '''
     Use case:
 
     python satsearch_doberitz.py \
@@ -797,7 +800,7 @@ if __name__ == '__main__':
     OR
 
     python satsearch_doberitz.py --band_names b04 b08 --start_date 2020-01-01 --end_date 2020-02-01 --cloud_cover 1 --download --verbose --verbose_plot
-    """
+    '''
     args = ArgumentParser()
     args.add_argument(
         '--geojson', type=str, default='doberitz_multipolygon.geojson'
@@ -859,3 +862,4 @@ if __name__ == '__main__':
         verbose=clargs.verbose,
         verbose_plot=clargs.verbose_plot
     )
+"""
