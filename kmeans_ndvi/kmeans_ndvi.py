@@ -31,7 +31,8 @@ class SentinelAOI(object):
             self, geojson: str,
             start_date: str = '2020-01-01', end_date: str = '2020-02-01',
             cloud_cover: int = 1, collection: str = 'sentinel-s2-l2a',
-            band_names: list = ['B04', 'B08'], download: bool = False):
+            band_names: list = ['B04', 'B08'], download: bool = False,
+            verbose: bool = False):
         """[summary]
 
         Args:
@@ -48,18 +49,8 @@ class SentinelAOI(object):
                 Defaults to ['B04', 'B08'].
             download (bool, optional): Flag whether to initate a download
                 (costs money). Defaults to False.
-            n_clusters (int, optional): number of clusters to operate K-Means.
-                Defaults to 5.
-            n_sig (int, optional): Number of sigma to flag outliers.
-                Defaults to 10.
-            quantile_range (list, optional): Range of distribution to
-                RobustScale. Defaults to [1, 99].
             verbose (bool, optional): Flag whether to output extra print
                 statemetns to stdout. Defaults to False.
-            verbose_plot (bool, optional): Flag whether to display extra
-                matplotlib figures. Defaults to False.
-            hist_bins (int, optional): number of bins in matplotlib plt.hist.
-                Defaults to 100.
         """
         self.scenes = {}  # Data structure for JP2 Data
         self.s3_client = boto3.client('s3')
@@ -70,6 +61,7 @@ class SentinelAOI(object):
         self.collection = collection
         self.band_names = band_names
         self.download = download
+        self.verbose = verbose
 
     def search_earth_aws(self):
         """Organize input parameters and call search query to AWS STAC API
@@ -233,8 +225,14 @@ class KMeansNDVI(SentinelAOI):
                 Defaults to 100.
         """
         super().__init__(
-            geojson, start_date, end_date, cloud_cover, collection,
-            band_names, download
+            geojson=geojson,
+            start_date=start_date,
+            end_date=end_date,
+            cloud_cover=cloud_cover,
+            collection=collection,
+            band_names=band_names,
+            download=download,
+            verbose=verbose
         )
         self.n_clusters = n_clusters
         self.n_sig = n_sig
