@@ -187,7 +187,7 @@ def get_coords_from_geometry(gdf):
 
 
 def compute_ndvi(
-        band04, band08, n_sig=10, verbose=False, verbose_plot=False,
+        band04, band08, gdf, n_sig=10, verbose=False, verbose_plot=False,
         scene_id=None, res=None, date=None, bins=100):
     """Compute the NDVI image from band08 and band04 values
 
@@ -205,7 +205,7 @@ def compute_ndvi(
     mad2std = 1.4826
 
     # By definition, the CRS is identical across bands
-    gdf_crs = gdf_up42_geoms.to_crs(
+    gdf_crs = gdf.to_crs(
         crs=band04['raster'].crs.data
     )
 
@@ -460,7 +460,10 @@ def sanity_check_temporal_kmeans(
     plt.show()
 
 
-def download_and_acquire_images(items_geojson, band_names=['B04', 'B08']):
+def download_and_acquire_images(
+        geojson, start_date='2020-01-01', end_date='2020-02-01',
+        cloud_cover=1, collection='sentinel-s2-l2a', band_names=['B04', 'B08'],
+        download=False, verbose=False):
     """Cycle through geoJSON to download files (if download is True) and return list of files for later storage
 
     Args:
@@ -469,8 +472,29 @@ def download_and_acquire_images(items_geojson, band_names=['B04', 'B08']):
     Returns:
         list: List of file paths for storage in future data structure
     """
+
+    search, gdf = search_earth_aws(
+        geojson=geojson,
+        start_date=start_date,
+        end_date=end_date,
+        cloud_cover=cloud_cover,
+        collection=collection
+    )
+
+    if verbose:
+        info_message(f'Combined search: {search.found()} items')
+
+    # Allocate all meta data for acquisition
+    items = search.items()
+
+    if verbose:
+        info_message(items.summary())
+
+    info_message("Allocating metadata in geoJSON")
+    items_geojson = items.geojson()
+
     # Log all filepaths to queried scenes
-    if clargs.download:
+    if download:
         # Loop over GeoJSON Features
         for feat_ in items_geojson['features']:  # tqdm(
             # Loop over GeoJSON Bands
@@ -495,14 +519,14 @@ def download_and_acquire_images(items_geojson, band_names=['B04', 'B08']):
             # Download the selected bands
             href = feat_['assets'][band_name_.upper()]['href']
             _, output_filepath = get_prefix_filepath(
-                href, collection=clargs.collection
+                href, collection=collection
             )
             filepaths[band_name_].append(output_filepath)
 
-    return filepaths
+    return filepaths, gdf
 
 
-def load_data_into_struct(filepaths):
+def load_data_into_struct(filepaths, verbose=False):
     """Load all files in filepaths into data structure jp2_data
 
     Args:
@@ -541,7 +565,7 @@ def load_data_into_struct(filepaths):
             if band_name_ not in jp2_data[scene_id_][res_][date_].keys():
                 jp2_data[scene_id_][res_][date_][band_name_] = {}
 
-            if clargs.verbose:
+            if verbose:
                 info_message(f"{fpath_} :: {os.path.exists(fpath_)}")
 
             raster_ = rasterio.open(fpath_, driver='JP2OpenJPEG')
@@ -553,7 +577,8 @@ def load_data_into_struct(filepaths):
     return jp2_data
 
 
-def compute_ndvi_for_all(jp2_data, n_sig=10, verbose=False, verbose_plot=False):
+def compute_ndvi_for_all(
+        jp2_data, gdf, n_sig=10, verbose=False, verbose_plot=False):
     """Cycle over jp2_data and compute NDVI for each scene and date_
 
     Args:
@@ -582,6 +607,7 @@ def compute_ndvi_for_all(jp2_data, n_sig=10, verbose=False, verbose_plot=False):
                 ndvi_masked_, mask_transform_ = compute_ndvi(
                     band_data_['B04'],
                     band_data_['B08'],
+                    gdf=gdf,
                     n_sig=n_sig,
                     scene_id=scene_id_,
                     res=res_,
@@ -723,6 +749,38 @@ def compute_temporal_kmeans(
     return jp2_data
 
 
+def search_earth_aws(
+        geojson, start_date='2020-01-01', end_date='2020-02-01',
+        cloud_cover=1, collection='sentinel-s2-l2a'):
+
+    # n_sig = 10
+    # Get Sat-Search URL
+    url_earth_search = os.environ.get('STAC_API_URL')
+
+    # Set Date time start and stop for query
+    eo_datetime = f'{start_date}/{end_date}'
+
+    # Set cloud cover percentage for query
+    eo_query = {
+        'eo:cloud_cover': {'lt': cloud_cover}
+    }
+
+    # Load geojson into gpd.GeoDataFrame
+    gdf_up42_geoms = gpd.read_file(geojson)
+
+    # Build a GeoJSON bounding box around AOI(s)
+    bounding_box = geom_to_bounding_box(gdf_up42_geoms)
+
+    # Use Sat-Search to idenitify and load all meta data within search field
+    search = Search(
+        url=url_earth_search,
+        intersects=bounding_box['features'][0]['geometry'],
+        datetime=eo_datetime,
+        query=eo_query,
+        collections=[collection]
+    )
+
+
 if __name__ == '__main__':
     """
     Use case:
@@ -761,57 +819,25 @@ if __name__ == '__main__':
     load_dotenv(clargs.env_filename)
     s3_client = boto3.client('s3')
 
-    # n_sig = 10
-    # Get Sat-Search URL
-    url_earth_search = os.environ.get('STAC_API_URL')
-
-    # Set Date time start and stop for query
-    eo_datetime = f'{clargs.start_date}/{clargs.end_date}'
-
-    # Set cloud cover percentage for query
-    eo_query = {
-        'eo:cloud_cover': {'lt': clargs.cloud_cover}
-    }
-
-    band_names = [band_name_.upper() for band_name_ in clargs.band_names]
-    # Load geojson into gpd.GeoDataFrame
-    gdf_up42_geoms = gpd.read_file(clargs.geojson)
-
-    # Build a GeoJSON bounding box around AOI(s)
-    bounding_box = geom_to_bounding_box(gdf_up42_geoms)
-
-    # Use Sat-Search to idenitify and load all meta data within search field
-    search = Search(
-        url=url_earth_search,
-        intersects=bounding_box['features'][0]['geometry'],
-        datetime=eo_datetime,
-        query=eo_query,
-        collections=[clargs.collection]
-    )
-
-    if clargs.verbose:
-        info_message(f'Combined search: {search.found()} items')
-
-    # Allocate all meta data for acquisition
-    items = search.items()
-
-    if clargs.verbose:
-        info_message(items.summary())
-
-    info_message("Allocating metadata in geoJSON")
-    items_geojson = items.geojson()
-
     info_message("Downloading and acquiring images")
-    filepaths = download_and_acquire_images(
-        items_geojson, band_names=band_names
+    filepaths, gdf_up42_geoms = download_and_acquire_images(
+        geojson=clargs.geojson,
+        start_date=clargs.start_date,
+        end_date=clargs.end_date,
+        cloud_cover=clargs.cloud_cover,
+        collection=clargs.collection,
+        band_names=[band_name_.upper() for band_name_ in clargs.band_names],
+        download=clargs.download,
+        verbose=clargs.verbose
     )
 
     info_message("Loading JP2 files into data structure")
-    jp2_data = load_data_into_struct(filepaths)
+    jp2_data = load_data_into_struct(filepaths, verbose=clargs.verbose)
 
     info_message("Computing NDVI for all scenes")
     jp2_data = compute_ndvi_for_all(
         jp2_data,
+        gdf=gdf_up42_geoms,
         n_sig=clargs.n_sig,
         verbose=clargs.verbose,
         verbose_plot=clargs.verbose_plot
