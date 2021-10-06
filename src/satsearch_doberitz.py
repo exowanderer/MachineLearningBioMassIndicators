@@ -7,6 +7,7 @@ import os
 import rasterio
 
 from argparse import ArgumentParser
+from datetime import datetime
 from dotenv import load_dotenv
 from matplotlib import pyplot as plt
 from tqdm import tqdm
@@ -283,6 +284,52 @@ def kmeans_spatial_cluster(
     return kmeans
 
 
+def kmeans_temporal_cluster(
+        image_stack, n_clusters=5, quantile_range=(1, 99),
+        verbose=False, verbose_plot=False):
+    """Compute kmeans clustering spatially over image as grey scale levels
+
+    Args:
+        image (np.array): input greayscale image
+        n_clusters (int, optional): number of grey scales. Defaults to 5.
+        quantile_range (tuple, optional): RobustScaler outlier rejecton 
+            threshold. Defaults to (1, 99).
+
+    Returns:
+        sklearn.cluster._kmeans.KMeans: trained kmeans clustering object
+    """
+    samples_ = image_stack.reshape(image_stack.shape[0], -1).T
+    where_zero = samples_.sum(axis=1) == 0
+    samples_ = samples_[~where_zero]
+
+    # Scale the input image data after reformatting 2D image as 1D vector and
+    #   rejecting the outliers using the RobustScaler algorithm
+    sclr = RobustScaler(quantile_range=quantile_range)
+    samples_scaled = sclr.fit_transform(samples_)
+
+    # Configure kmeans clustering instance
+    kmeans = KMeans(
+        n_clusters=n_clusters,
+        n_init=10,
+        max_iter=300,
+        tol=0.0001,
+        verbose=0,
+        random_state=None,
+        copy_x=True,
+        algorithm='auto',
+    )
+
+    # Compute the K-Means clusters and store in object
+    kmeans.fit(samples_scaled)
+
+    if verbose_plot:
+        sanity_check_temporal_kmeans(
+            kmeans, image_stack, quantile_range=quantile_range
+        )
+
+    return kmeans
+
+
 def sanity_check_ndvi_statistics(image, scene_id, res, date, bins=100):
     """Plot imshow and hist over image
 
@@ -330,6 +377,58 @@ def sanity_check_spatial_kmeans(
         axs[k+1].imshow((cluster_pred == k).reshape(image.shape))
 
     plt.subplots_adjust(wspace=1e-2)
+    plt.show()
+
+
+def sanity_check_temporal_kmeans(
+        kmeans, image_stack, quantile_range=(1, 99)):
+    """Plot imshow of clustering solution as sanity check
+
+    Args:
+        kmeans (sklearn.cluster._kmeans.kmeans): object storing kmeans solution
+        image (np.array): image with which kmeans was trains
+        quantile_range (tuple, optional): RobustScaler outlier rejecton
+            threshold. Defaults to (1, 99).
+    """
+    samples_ = image_stack.reshape(image_stack.shape[0], -1).T
+    where_zero = samples_.sum(axis=1) == 0
+    samples_notzero = samples_[~where_zero]
+
+    # Scale the input image data after reformatting 2D image as 1D vector and
+    #   rejecting the outliers using the RobustScaler algorithm
+    sclr = RobustScaler(quantile_range=quantile_range)
+    samples_scaled = sclr.fit_transform(samples_notzero)
+
+    # cluster_centers = kmeans.cluster_centers_
+    cluster_pred = kmeans.predict(samples_scaled)
+    cluster_image = np.zeros(samples_.shape[0])
+    cluster_image[~where_zero] = cluster_pred + 1
+
+    base_fig_size = 5
+    _, axs = plt.subplots(
+        ncols=kmeans.n_clusters + 2,
+        figsize=(base_fig_size*(kmeans.n_clusters + 1), base_fig_size)
+    )
+
+    img_shape = image_stack.shape[1:]
+    cluster_image = cluster_image.reshape(img_shape)
+
+    axs[0].imshow(cluster_image, interpolation='None')
+    axs[1].imshow(cluster_image == 0, interpolation='None')
+    for k in range(kmeans.n_clusters):
+        axs[k+2].imshow((cluster_image == (k+1)), interpolation='None')
+
+    [ax.grid(False) for ax in axs.ravel()]  # remove grid for images
+    [ax.xaxis.set_ticks([]) for ax in axs.ravel()]  # remove xticks
+    [ax.yaxis.set_ticks([]) for ax in axs.ravel()]  # remove xticks
+
+    plt.subplots_adjust(
+        left=0,
+        right=1,
+        bottom=0,
+        top=1,
+        wspace=1e-2
+    )
     plt.show()
 
 
@@ -456,6 +555,11 @@ if __name__ == '__main__':
             # Use filepath to identify scene_id, res, and date
             _, scene_id_, res_, date_, _ = fpath_.split('/')
 
+            # Adjust month from 1 to 2 digits if necessary
+            year_, month_, day_ = date_.split('-')
+            month_ = f"{month_:0>2}"
+            date_ = f"{year_}-{month_}-{day_}"
+
             # Build up data structure for easier access later
             if scene_id_ not in jp2_data.keys():
                 jp2_data[scene_id_] = {}
@@ -508,3 +612,76 @@ if __name__ == '__main__':
 
     if clargs.verbose_plot:
         plt.show()
+
+    # Make NDVI time series per scene and resolution
+
+    # Allocate NDVI timeseries for each Scene, Resolution, and Date
+    for scene_id_, res_dict_ in jp2_data.items():
+        for res_, date_dict_ in res_dict_.items():
+            timestamps_ = []
+            timeseries_ = []
+            for date_, dict_ in date_dict_.items():
+                if date_ != 'timeseries':
+                    timestamps_.append(datetime.fromisoformat(date_))
+                    timeseries_.append(dict_['ndvi'])
+
+            timeseries_ = np.array(timeseries_)
+            jp2_data[scene_id_][res_]['timeseries'] = {}
+            jp2_data[scene_id_][res_]['timeseries']['ndvi'] = timeseries_
+            jp2_data[scene_id_][res_]['timeseries']['timestamps'] = timestamps_
+
+    # Compute NDVI for each Scene, Resolution, and Date
+    for scene_id_, res_dict_ in jp2_data.items():
+        for res_, date_dict_ in res_dict_.items():
+            # Compute K-Means Spatial Clustering per Image
+            kmeans_ = kmeans_temporal_cluster(
+                date_dict_['timeseries']['ndvi'],
+                n_clusters=10,
+                quantile_range=(1, 99),
+                verbose=clargs.verbose,
+                verbose_plot=clargs.verbose_plot
+            )
+
+            # Store the NDVI and masked transform in data struct
+            jp2_data[scene_id_][res_]['timeseries']['kmeans'] = kmeans_
+
+            if clargs.verbose_plot:
+                sanity_check_ndvi_statistics(
+                    ndvi_masked_, scene_id_, res_, date_, bins=100
+                )
+
+    """
+            date_dict_sorted = dict(
+                sorted(
+                    date_dict_.items(),
+                    key=lambda x: datetime.fromisoformat(x[0])
+                )
+            )
+
+            timeseries_ = []
+            for date_, band_data_ in date_dict_sorted.items():
+                timeseries_.append(band_data_['ndvi'])
+
+            jp2_data[scene_id_][res_]['timeseries'] = timeseries_
+    """
+    """
+
+            # Compute K-Means Spatial Clustering per Image
+            kmeans_ = kmeans_spatial_cluster(
+                ndvi_masked_,
+                n_clusters=5,
+                quantile_range=(1, 99),
+                verbose=clargs.verbose,
+                verbose_plot=clargs.verbose_plot
+            )
+
+            # Store the NDVI and masked transform in data struct
+            jp2_data[scene_id_][res_][date_]['ndvi'] = ndvi_masked_
+            jp2_data[scene_id_][res_][date_]['transform'] = mask_transform_
+            jp2_data[scene_id_][res_][date_]['kmeans_spatial'] = kmeans_
+
+            if clargs.verbose_plot:
+                sanity_check_ndvi_statistics(
+                    ndvi_masked_, scene_id_, res_, date_, bins=100
+                )
+    """
