@@ -402,7 +402,8 @@ def sanity_check_spatial_kmeans(kmeans, image, quantile_range=(1, 99),
         top=1,
         wspace=1e-2
     )
-    fig.suptitle(f"Spatial Kmeans Reconstruction: {scene_id} - {res} - {date}")
+    fig.suptitle(
+        f"Spatial K-Means Reconstruction: {scene_id} - {res} - {date}")
     plt.show()
 
 
@@ -456,12 +457,12 @@ def sanity_check_temporal_kmeans(
         top=1,
         wspace=1e-2
     )
-    fig.suptitle(f"Temporal Kmeans Reconstruction: {scene_id} - {res}")
+    fig.suptitle(f"Temporal K-Means Reconstruction: {scene_id} - {res}")
     plt.show()
 
 
 def download_and_acquire_images(
-        geojson, start_date='2020-01-01', end_date='2020-02-01',
+        geojson, s3_client=None, start_date='2020-01-01', end_date='2020-02-01',
         cloud_cover=1, collection='sentinel-s2-l2a', band_names=['B04', 'B08'],
         download=False, verbose=False):
     """Cycle through geoJSON to download files (if download is True) and return list of files for later storage
@@ -472,7 +473,7 @@ def download_and_acquire_images(
     Returns:
         list: List of file paths for storage in future data structure
     """
-
+    assert(s3_client is not None), 'Please assign and allocate an s3_client'
     search, gdf = search_earth_aws(
         geojson=geojson,
         start_date=start_date,
@@ -496,9 +497,9 @@ def download_and_acquire_images(
     # Log all filepaths to queried scenes
     if download:
         # Loop over GeoJSON Features
-        for feat_ in items_geojson['features']:  # tqdm(
+        for feat_ in tqdm(items_geojson['features']):
             # Loop over GeoJSON Bands
-            for band_name_ in band_names:  # tqdm(
+            for band_name_ in tqdm(band_names):
                 # if not band_name_ in filepaths.keys():
                 #     filepaths[band_name_] = []
                 # Download the selected bands
@@ -593,9 +594,9 @@ def compute_ndvi_for_all(
         dict: Updated jp2_data JSON like dict
     """
     # Compute NDVI for each Scene, Resolution, and Date
-    for scene_id_, res_dict_ in jp2_data.items():
-        for res_, date_dict_ in res_dict_.items():
-            for date_, band_data_ in date_dict_.items():
+    for scene_id_, res_dict_ in tqdm(jp2_data.items()):
+        for res_, date_dict_ in tqdm(res_dict_.items()):
+            for date_, band_data_ in tqdm(date_dict_.items()):
                 if not 'B04' in band_data_.keys() and \
                         not 'B08' in band_data_.keys():
                     warning_message(
@@ -634,11 +635,11 @@ def allocate_ndvi_timeseries(jp2_data):
         dict: Updated jp2_data JSON like dict
     """
     # Allocate NDVI timeseries for each Scene, Resolution, and Date
-    for scene_id_, res_dict_ in jp2_data.items():
-        for res_, date_dict_ in res_dict_.items():
+    for scene_id_, res_dict_ in tqdm(jp2_data.items()):
+        for res_, date_dict_ in tqdm(res_dict_.items()):
             timestamps_ = []
             timeseries_ = []
-            for date_, dict_ in date_dict_.items():
+            for date_, dict_ in tqdm(date_dict_.items()):
                 if 'ndvi' not in dict_.keys():
                     continue
 
@@ -674,9 +675,9 @@ def compute_spatial_kmeans(
         dict: Updated jp2_data JSON like dict
     """
     # Compute NDVI for each Scene, Resolution, and Date
-    for scene_id_, res_dict_ in jp2_data.items():
-        for res_, date_dict_ in res_dict_.items():
-            for date_, band_data_ in date_dict_.items():
+    for scene_id_, res_dict_ in tqdm(jp2_data.items()):
+        for res_, date_dict_ in tqdm(res_dict_.items()):
+            for date_, band_data_ in tqdm(date_dict_.items()):
                 if not 'B04' in band_data_.keys() and \
                         not 'B08' in band_data_.keys():
                     warning_message(
@@ -722,8 +723,8 @@ def compute_temporal_kmeans(
         dict: Updated jp2_data JSON like dict
     """
     # Compute NDVI for each Scene, Resolution, and Date
-    for scene_id_, res_dict_ in jp2_data.items():
-        for res_, date_dict_ in res_dict_.items():
+    for scene_id_, res_dict_ in tqdm(jp2_data.items()):
+        for res_, date_dict_ in tqdm(res_dict_.items()):
             if 'timeseries' not in date_dict_.keys():
                 continue
             if date_dict_['timeseries']['ndvi'].size == 0:
