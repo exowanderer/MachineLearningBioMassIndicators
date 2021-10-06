@@ -1,6 +1,6 @@
 # from logging import warn
 from logging import debug, warning
-# import boto3
+import boto3
 import geopandas as gpd
 import json
 import numpy as np
@@ -461,406 +461,277 @@ def sanity_check_temporal_kmeans(
     plt.show()
 
 
-def download_and_acquire_images(
-        geojson, s3_client=None, start_date='2020-01-01', end_date='2020-02-01',
-        cloud_cover=1, collection='sentinel-s2-l2a', band_names=['B04', 'B08'],
-        download=False, verbose=False):
-    """Cycle through geoJSON to download files (if download is True) and return list of files for later storage
+class SentinelAPISample(object):
+    """[summary]
 
     Args:
-        items_geojson (gpd.GeoDataFrame): GeoDataFrame storing satsearch query results with href for each s3 tile
-
-    Returns:
-        list: List of file paths for storage in future data structure
+        object ([type]): [description]
     """
-    assert(s3_client is not None), 'Please assign and allocate an s3_client'
-    search, gdf = search_earth_aws(
-        geojson=geojson,
-        start_date=start_date,
-        end_date=end_date,
-        cloud_cover=cloud_cover,
-        collection=collection
-    )
 
-    if verbose:
-        info_message(f'Combined search: {search.found()} items')
+    def __init__(
+            self, geojson, start_date='2020-01-01', end_date='2020-02-01',
+            cloud_cover=1, collection='sentinel-s2-l2a',
+            band_names=['B04', 'B08'], download=False, n_clusters=5, n_sig=10,
+            quantile_range=(1, 99), verbose=False, verbose_plot=False,
+            hist_bins=100):
+        """[summary]
 
-    # Allocate all meta data for acquisition
-    items = search.items()
+        Args:
+            geojson ([type]): [description]
+            start_date (str, optional): [description]. Defaults to '2020-01-01'.
+            end_date (str, optional): [description]. Defaults to '2020-02-01'.
+            cloud_cover (int, optional): [description]. Defaults to 1.
+            collection (str, optional): [description]. Defaults to 'sentinel-s2-l2a'.
+            band_names (list, optional): [description]. Defaults to ['B04', 'B08'].
+            download (bool, optional): [description]. Defaults to False.
+            n_clusters (int, optional): [description]. Defaults to 5.
+            n_sig (int, optional): [description]. Defaults to 10.
+            quantile_range (tuple, optional): [description]. Defaults to (1, 99).
+            verbose (bool, optional): [description]. Defaults to False.
+            verbose_plot (bool, optional): [description]. Defaults to False.
+            hist_bins (int, optional): [description]. Defaults to 100.
+        """
+        self.scenes = {}  # Data structure for JP2 Data
+        self.s3_client = boto3.client('s3')
+        self.geojson = geojson
+        self.start_date = start_date
+        self.end_date = end_date
+        self.cloud_cover = cloud_cover
+        self.collection = collection
+        self.band_names = band_names
+        self.download = download
+        self.n_clusters = n_clusters
+        self.n_sig = n_sig
+        self.quantile_range = quantile_range
+        self.verbose = verbose
+        self.verbose_plot = verbose_plot
+        self.hist_bins = hist_bins
 
-    if verbose:
-        info_message(items.summary())
+    def search_earth_aws(self):
+        """[summary]
+        """
 
-    info_message("Allocating metadata in geoJSON")
-    items_geojson = items.geojson()
+        # Get Sat-Search URL
+        self.url_earth_search = os.environ.get('STAC_API_URL')
 
-    # Log all filepaths to queried scenes
-    if download:
-        # Loop over GeoJSON Features
-        for feat_ in tqdm(items_geojson['features']):
-            # Loop over GeoJSON Bands
-            for band_name_ in tqdm(band_names):
-                # if not band_name_ in filepaths.keys():
-                #     filepaths[band_name_] = []
-                # Download the selected bands
-                _ = download_tile_band(  # filepath_
-                    feat_['assets'][band_name_.upper()]['href'],
-                    s3_client=s3_client
-                )
-                # filepaths[band_name_].append(filepath_)
+        # Set Date time start and stop for query
+        eo_datetime = f'{self.start_date}/{self.end_date}'
 
-    filepaths = {}
-    # Loop over GeoJSON Features to Allocate all requested files
-    for feat_ in items_geojson['features']:
-        # Loop over GeoJSON Bands
-        for band_name_ in band_names:
-            if not band_name_ in filepaths.keys():
-                filepaths[band_name_] = []
+        # Set cloud cover percentage for query
+        eo_query = {
+            'eo:cloud_cover': {'lt': self.cloud_cover}
+        }
 
-            # Download the selected bands
-            href = feat_['assets'][band_name_.upper()]['href']
-            _, output_filepath = get_prefix_filepath(
-                href, collection=collection
-            )
-            filepaths[band_name_].append(output_filepath)
+        # Load geojson into gpd.GeoDataFrame
+        self.gdf = gpd.read_file(self.geojson)
 
-    return filepaths, gdf
+        # Build a GeoJSON bounding box around AOI(s)
+        bounding_box = geom_to_bounding_box(self.gdf)
 
+        # Use Sat-Search to idenitify and load all meta data within search field
+        self.search = Search(
+            url=self.url_earth_search,
+            intersects=bounding_box['features'][0]['geometry'],
+            datetime=eo_datetime,
+            query=eo_query,
+            collections=[self.collection]
+        )
 
-def load_data_into_struct(filepaths, verbose=False):
-    """Load all files in filepaths into data structure jp2_data
+    def download_and_acquire_images(self):
+        """Cycle through geoJSON to download files (if download is True) and return list of files for later storage
+        """
+        assert(self.s3_client is not None), \
+            'Please assign and allocate an s3_client'
 
-    Args:
-        filepaths (list): List of strings for file allocated from satsearch
+        self.search_earth_aws()
 
-    Returns:
-        dict: JSON like dict of all date downloaded via satsearch and boto3
-    """
-    # Load all data into JSON data structure
+        if self.verbose:
+            info_message(f'Combined search: {self.search.found()} items')
 
-    jp2_data = {}
-    for band_name_, filepaths_ in filepaths.items():
-        # loop over band names
-        for fpath_ in filepaths_:
-            # loop over file paths
-            if not os.path.exists(fpath_):
-                warning_message(f"{fpath_} does not exist")
-                continue
+        # Allocate all meta data for acquisition
+        self.items = self.search.items()
 
-            # Use filepath to identify scene_id, res, and date
-            _, scene_id_, res_, date_, _ = fpath_.split('/')
+        if self.verbose:
+            info_message(self.items.summary())
 
-            # Adjust month from 1 to 2 digits if necessary
-            year_, month_, day_ = date_.split('-')
-            month_ = f"{month_:0>2}"
-            day_ = f"{day_:0>2}"
-            date_ = f"{year_}-{month_}-{day_}"
+        info_message("Allocating metadata in geoJSON")
+        self.items_geojson = self.items.geojson()
 
-            # Build up data structure for easier access later
-            if scene_id_ not in jp2_data.keys():
-                jp2_data[scene_id_] = {}
-            if res_ not in jp2_data[scene_id_].keys():
-                jp2_data[scene_id_][res_] = {}
-            if date_ not in jp2_data[scene_id_][res_].keys():
-                jp2_data[scene_id_][res_][date_] = {}
-            if band_name_ not in jp2_data[scene_id_][res_][date_].keys():
-                jp2_data[scene_id_][res_][date_][band_name_] = {}
-
-            if verbose:
-                info_message(f"{fpath_} :: {os.path.exists(fpath_)}")
-
-            raster_ = rasterio.open(fpath_, driver='JP2OpenJPEG')
-            # rast_data_ = raster_.read()
-
-            jp2_data[scene_id_][res_][date_][band_name_]['raster'] = raster_
-            # jp2_data[scene_id_][res_][date_][band_name_]['data'] = rast_data_
-
-    return jp2_data
-
-
-def compute_ndvi_for_all(
-        jp2_data, gdf, n_sig=10, verbose=False, verbose_plot=False):
-    """Cycle over jp2_data and compute NDVI for each scene and date_
-
-    Args:
-        jp2_data (dict): JSON like dict for data structure
-        n_sig (int, optional): number of sigma to compute NDVIs. Defaults to 10.
-        verbose (bool, optional): Allow Info messages to be printed.
-            Defaults to False.
-        verbose_plot (bool, optional): Allow sanity plots to be displayed.
-            Defaults to False.
-
-    Returns:
-        dict: Updated jp2_data JSON like dict
-    """
-    # Compute NDVI for each Scene, Resolution, and Date
-    for scene_id_, res_dict_ in tqdm(jp2_data.items()):
-        for res_, date_dict_ in tqdm(res_dict_.items()):
-            for date_, band_data_ in tqdm(date_dict_.items()):
-                if not 'B04' in band_data_.keys() and \
-                        not 'B08' in band_data_.keys():
-                    warning_message(
-                        'NDVI cannot be computed without both Band04 and Band08'
+        # Log all filepaths to queried scenes
+        if self.download:
+            # Loop over GeoJSON Features
+            for feat_ in tqdm(self.items_geojson['features']):
+                # Loop over GeoJSON Bands
+                for band_name_ in tqdm(self.band_names):
+                    # if not band_name_ in filepaths.keys():
+                    #     filepaths[band_name_] = []
+                    # Download the selected bands
+                    _ = download_tile_band(  # filepath_
+                        feat_['assets'][band_name_.upper()]['href'],
+                        s3_client=self.s3_client
                     )
-                    continue
+                    # filepaths[band_name_].append(filepath_)
 
-                # Compute NDVI for individual scene, res, date
-                ndvi_masked_, mask_transform_ = compute_ndvi(
-                    band_data_['B04'],
-                    band_data_['B08'],
-                    gdf=gdf,
-                    n_sig=n_sig,
-                    scene_id=scene_id_,
-                    res=res_,
-                    date=date_,
-                    bins=100,
-                    verbose=verbose,
-                    verbose_plot=verbose_plot
+        self.filepaths = {}
+        # Loop over GeoJSON Features to Allocate all requested files
+        for feat_ in self.items_geojson['features']:
+            # Loop over GeoJSON Bands
+            for band_name_ in self.band_names:
+                if not band_name_ in self.filepaths.keys():
+                    self.filepaths[band_name_] = []
+
+                # Download the selected bands
+                href = feat_['assets'][band_name_.upper()]['href']
+                _, output_filepath = get_prefix_filepath(
+                    href, collection=self.collection
                 )
+                self.filepaths[band_name_].append(output_filepath)
 
-                # Store the NDVI and masked transform in data struct
-                jp2_data[scene_id_][res_][date_]['ndvi'] = ndvi_masked_
-                jp2_data[scene_id_][res_][date_]['transform'] = mask_transform_
+    def load_data_into_struct(self):
+        """Load all files in filepaths into data structure self.scenes
+        """
 
-    return jp2_data
-
-
-def allocate_ndvi_timeseries(jp2_data):
-    """Allocate NDIV images per scene and date into time series
-
-    Args:
-        jp2_data (dict): JSON like dict for data file_structure
-
-    Returns:
-        dict: Updated jp2_data JSON like dict
-    """
-    # Allocate NDVI timeseries for each Scene, Resolution, and Date
-    for scene_id_, res_dict_ in tqdm(jp2_data.items()):
-        for res_, date_dict_ in tqdm(res_dict_.items()):
-            timestamps_ = []
-            timeseries_ = []
-            for date_, dict_ in tqdm(date_dict_.items()):
-                if 'ndvi' not in dict_.keys():
+        for band_name_, filepaths_ in self.filepaths.items():
+            # loop over band names
+            for fpath_ in filepaths_:
+                # loop over file paths
+                if not os.path.exists(fpath_):
+                    warning_message(f"{fpath_} does not exist")
                     continue
 
-                if date_ != 'timeseries':
-                    timestamps_.append(datetime.fromisoformat(date_))
-                    timeseries_.append(dict_['ndvi'])
+                # Use filepath to identify scene_id, res, and date
+                _, scene_id_, res_, date_, _ = fpath_.split('/')
 
-            timeseries_ = np.array(timeseries_)
-            jp2_data[scene_id_][res_]['timeseries'] = {}
-            jp2_data[scene_id_][res_]['timeseries']['ndvi'] = timeseries_
-            jp2_data[scene_id_][res_]['timeseries']['timestamps'] = timestamps_
+                # Adjust month from 1 to 2 digits if necessary
+                year_, month_, day_ = date_.split('-')
+                month_ = f"{month_:0>2}"
+                day_ = f"{day_:0>2}"
+                date_ = f"{year_}-{month_}-{day_}"
 
-    return jp2_data
+                # Build up data structure for easier access later
+                if scene_id_ not in self.scenes.keys():
+                    self.scenes[scene_id_] = {}
+                if res_ not in self.scenes[scene_id_].keys():
+                    self.scenes[scene_id_][res_] = {}
+                if date_ not in self.scenes[scene_id_][res_].keys():
+                    self.scenes[scene_id_][res_][date_] = {}
+                if band_name_ not in self.scenes[scene_id_][res_][date_].keys():
+                    self.scenes[scene_id_][res_][date_][band_name_] = {}
 
+                if self.verbose:
+                    info_message(f"{fpath_} :: {os.path.exists(fpath_)}")
 
-def compute_spatial_kmeans(
-        jp2_data, n_clusters=5, quantile_range=(1, 99),
-        verbose=False, verbose_plot=False):
-    """Cycle through all NDVI and compute spatial K-Means clustering for
+                raster_ = {}
+                raster_['raster'] = rasterio.open(fpath_, driver='JP2OpenJPEG')
+                self.scenes[scene_id_][res_][date_][band_name_] = raster_
 
-    Args:
-        jp2_data (dict): JSON like dict for data structure for
-        n_clusters (int, optional): number of clusters to compute K-Means over.
-            Defaults to 5.
-        quantile_range (tuple, optional): RobustScaler outlier rejecton
-            threshold. Defaults to (1, 99).
-        verbose (bool, optional): Allow Info messages to be printed.
-            Defaults to False.
-        verbose_plot (bool, optional): Allow sanity plots to be displayed.
-            Defaults to False.
+    def compute_ndvi_for_all(self):
+        """Cycle over self.scenes and compute NDVI for each scene and date_
+        """
+        for scene_id_, res_dict_ in tqdm(self.scenes.items()):
+            for res_, date_dict_ in tqdm(res_dict_.items()):
+                for date_, band_data_ in tqdm(date_dict_.items()):
+                    if not 'B04' in band_data_.keys() and \
+                            not 'B08' in band_data_.keys():
+                        warning_message(
+                            'NDVI cannot be computed without both Band04 and Band08'
+                        )
+                        continue
 
-    Returns:
-        dict: Updated jp2_data JSON like dict
-    """
-    # Compute NDVI for each Scene, Resolution, and Date
-    for scene_id_, res_dict_ in tqdm(jp2_data.items()):
-        for res_, date_dict_ in tqdm(res_dict_.items()):
-            for date_, band_data_ in tqdm(date_dict_.items()):
-                if not 'B04' in band_data_.keys() and \
-                        not 'B08' in band_data_.keys():
+                    # Compute NDVI for individual scene, res, date
+                    ndvi_masked_, mask_transform_ = compute_ndvi(
+                        band_data_['B04'],
+                        band_data_['B08'],
+                        gdf=self.gdf,
+                        n_sig=self.n_sig,
+                        scene_id=scene_id_,
+                        res=res_,
+                        date=date_,
+                        bins=self.hist_bins,
+                        verbose=self.verbose,
+                        verbose_plot=self.verbose_plot
+                    )
+
+                    # Store the NDVI and masked transform in data struct
+                    self.scenes[scene_id_][res_][date_]['ndvi'] = ndvi_masked_
+                    self.scenes[scene_id_][res_][date_]['transform'] = mask_transform_
+
+    def allocate_ndvi_timeseries(self):
+        """Allocate NDIV images per scene and date into time series
+        """
+        for scene_id_, res_dict_ in tqdm(self.scenes.items()):
+            for res_, date_dict_ in tqdm(res_dict_.items()):
+                timestamps_ = []
+                timeseries_ = []
+                for date_, dict_ in tqdm(date_dict_.items()):
+                    if 'ndvi' not in dict_.keys():
+                        continue
+
+                    if date_ != 'timeseries':
+                        timestamps_.append(datetime.fromisoformat(date_))
+                        timeseries_.append(dict_['ndvi'])
+
+                timeseries_ = np.array(timeseries_)
+
+                timeseries_dict = {}
+                timeseries_dict['ndvi'] = timeseries_
+                timeseries_dict['timestamps'] = timestamps_
+
+                self.scenes[scene_id_][res_]['timeseries'] = timeseries_dict
+
+    def compute_spatial_kmeans(self):
+        """Cycle through all NDVI and Compute NDVI for each Scene, Resolution, 
+            and Date
+        """
+        for scene_id_, res_dict_ in tqdm(self.scenes.items()):
+            for res_, date_dict_ in tqdm(res_dict_.items()):
+                for date_, band_data_ in tqdm(date_dict_.items()):
+                    if not 'B04' in band_data_.keys() and \
+                            not 'B08' in band_data_.keys():
+                        warning_message(
+                            'NDVI cannot be computed without both Band04 and Band08'
+                        )
+                        continue
+
+                    # Compute K-Means Spatial Clustering per Image
+                    kmeans_ = kmeans_spatial_cluster(
+                        self.scenes[scene_id_][res_][date_]['ndvi'],
+                        n_clusters=self.n_clusters,
+                        quantile_range=self.quantile_range,
+                        verbose=self.verbose,
+                        verbose_plot=self.verbose_plot,
+                        scene_id=scene_id_,
+                        res=res_,
+                        date=date_
+                    )
+
+                    # Store the NDVI and masked transform in data struct
+                    self.scenes[scene_id_][res_][date_]['kmeans_spatial'] = kmeans_
+
+    def compute_temporal_kmeans(self):
+        """Cycle over all NDVI time series and Compute NDVI for each Scene,
+            Resolution, and Date
+        """
+        for scene_id_, res_dict_ in tqdm(self.scenes.items()):
+            for res_, date_dict_ in tqdm(res_dict_.items()):
+                if 'timeseries' not in date_dict_.keys():
+                    continue
+                if date_dict_['timeseries']['ndvi'].size == 0:
                     warning_message(
-                        'NDVI cannot be computed without both Band04 and Band08'
+                        f'Temporal NDVI does not exist for {scene_id_} at {res_}'
                     )
                     continue
 
                 # Compute K-Means Spatial Clustering per Image
-                kmeans_ = kmeans_spatial_cluster(
-                    jp2_data[scene_id_][res_][date_]['ndvi'],
-                    n_clusters=n_clusters,
-                    quantile_range=quantile_range,
-                    verbose=verbose,
-                    verbose_plot=verbose_plot,
+                kmeans_ = kmeans_temporal_cluster(
+                    date_dict_['timeseries']['ndvi'],
+                    n_clusters=self.n_clusters,
+                    quantile_range=self.quantile_range,
+                    verbose=self.verbose,
+                    verbose_plot=self.verbose_plot,
                     scene_id=scene_id_,
-                    res=res_,
-                    date=date_
+                    res=res_
                 )
 
                 # Store the NDVI and masked transform in data struct
-                jp2_data[scene_id_][res_][date_]['kmeans_spatial'] = kmeans_
-
-    return jp2_data
-
-
-def compute_temporal_kmeans(
-        jp2_data, n_clusters=5, quantile_range=(1, 99),
-        verbose=False, verbose_plot=False):
-    """Cycle over all NDVI time series and compute pixel-wise K-Means for
-
-    Args:
-        jp2_data (dict): JSON like dict for data file_structure
-        n_clusters (int, optional): Number of clusters to compute K-Means over.
-            Defaults to 5.
-        quantile_range (tuple, optional): RobustScaler outlier rejecton
-            threshold. Defaults to (1, 99).
-        verbose (bool, optional): Allow Info messages to be printed.
-            Defaults to False.
-        verbose_plot (bool, optional): Allow sanity plots to be displayed.
-            Defaults to False.
-
-    Returns:
-        dict: Updated jp2_data JSON like dict
-    """
-    # Compute NDVI for each Scene, Resolution, and Date
-    for scene_id_, res_dict_ in tqdm(jp2_data.items()):
-        for res_, date_dict_ in tqdm(res_dict_.items()):
-            if 'timeseries' not in date_dict_.keys():
-                continue
-            if date_dict_['timeseries']['ndvi'].size == 0:
-                warning_message(
-                    f'Temporal NDVI does not exist for {scene_id_} at {res_}'
-                )
-                continue
-
-            # Compute K-Means Spatial Clustering per Image
-            kmeans_ = kmeans_temporal_cluster(
-                date_dict_['timeseries']['ndvi'],
-                n_clusters=n_clusters,
-                quantile_range=quantile_range,
-                verbose=verbose,
-                verbose_plot=verbose_plot,
-                scene_id=scene_id_,
-                res=res_
-            )
-
-            # Store the NDVI and masked transform in data struct
-            jp2_data[scene_id_][res_]['timeseries']['kmeans'] = kmeans_
-
-    return jp2_data
-
-
-def search_earth_aws(
-        geojson, start_date='2020-01-01', end_date='2020-02-01',
-        cloud_cover=1, collection='sentinel-s2-l2a'):
-
-    # n_sig = 10
-    # Get Sat-Search URL
-    url_earth_search = os.environ.get('STAC_API_URL')
-
-    # Set Date time start and stop for query
-    eo_datetime = f'{start_date}/{end_date}'
-
-    # Set cloud cover percentage for query
-    eo_query = {
-        'eo:cloud_cover': {'lt': cloud_cover}
-    }
-
-    # Load geojson into gpd.GeoDataFrame
-    gdf = gpd.read_file(geojson)
-
-    # Build a GeoJSON bounding box around AOI(s)
-    bounding_box = geom_to_bounding_box(gdf)
-
-    # Use Sat-Search to idenitify and load all meta data within search field
-    search = Search(
-        url=url_earth_search,
-        intersects=bounding_box['features'][0]['geometry'],
-        datetime=eo_datetime,
-        query=eo_query,
-        collections=[collection]
-    )
-
-    return search, gdf
-
-
-"""
-if __name__ == '__main__':
-    '''
-    Use case:
-
-    python satsearch_doberitz.py \
-        --band_names b04 b08\
-        --start_date 2020-01-01 \
-        --end_date 2020-02-01 \
-        --cloud_cover 1 \
-        --download\
-        --verbose\
-        --verbose_plot
-
-    OR
-
-    python satsearch_doberitz.py --band_names b04 b08 --start_date 2020-01-01 --end_date 2020-02-01 --cloud_cover 1 --download --verbose --verbose_plot
-    '''
-    args = ArgumentParser()
-    args.add_argument(
-        '--geojson', type=str, default='doberitz_multipolygon.geojson'
-    )
-    args.add_argument('--scene_id', type=str)
-    args.add_argument('--band_names', nargs='+', default=['B04', 'B08'])
-    args.add_argument('--collection', type=str, default='sentinel-s2-l2a')
-    args.add_argument('--start_date', type=str, default='2020-01-01')
-    args.add_argument('--end_date', type=str, default='2020-02-01')
-    args.add_argument('--cloud_cover', type=int, default=1)
-    args.add_argument('--n_sig', type=float, default=10)
-    args.add_argument('--download', action='store_true')
-    args.add_argument('--download_all', action='store_true')
-    args.add_argument('--env_filename', type=str, default='.env')
-    args.add_argument('--verbose', action='store_true')
-    args.add_argument('--verbose_plot', action='store_true')
-    clargs = args.parse_args()
-
-    load_dotenv(clargs.env_filename)
-    s3_client = boto3.client('s3')
-
-    info_message("Downloading and acquiring images")
-    filepaths, gdf_up42_geoms = download_and_acquire_images(
-        geojson=clargs.geojson,
-        start_date=clargs.start_date,
-        end_date=clargs.end_date,
-        cloud_cover=clargs.cloud_cover,
-        collection=clargs.collection,
-        band_names=[band_name_.upper() for band_name_ in clargs.band_names],
-        download=clargs.download,
-        verbose=clargs.verbose
-    )
-
-    info_message("Loading JP2 files into data structure")
-    jp2_data = load_data_into_struct(filepaths, verbose=clargs.verbose)
-
-    info_message("Computing NDVI for all scenes")
-    jp2_data = compute_ndvi_for_all(
-        jp2_data,
-        gdf=gdf_up42_geoms,
-        n_sig=clargs.n_sig,
-        verbose=clargs.verbose,
-        verbose_plot=clargs.verbose_plot
-    )
-
-    info_message("Allocating NDVI time series")
-    jp2_data = allocate_ndvi_timeseries(jp2_data)
-
-    info_message("Computing spatial K-Means for each scene NDVI")
-    jp2_data = compute_spatial_kmeans(
-        jp2_data,
-        verbose=clargs.verbose,
-        verbose_plot=clargs.verbose_plot
-    )
-
-    info_message("Computing temporal K-Means for each scene NDVIs over time")
-    jp2_data = compute_temporal_kmeans(
-        jp2_data,
-        verbose=clargs.verbose,
-        verbose_plot=clargs.verbose_plot
-    )
-"""
+                self.scenes[scene_id_][res_]['timeseries']['kmeans'] = kmeans_
