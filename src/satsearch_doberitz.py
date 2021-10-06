@@ -259,7 +259,7 @@ def kmeans_spatial_cluster(
     Args:
         image (np.array): input greayscale image
         n_clusters (int, optional): number of grey scales. Defaults to 5.
-        quantile_range (tuple, optional): RobustScaler outlier rejecton 
+        quantile_range (tuple, optional): RobustScaler outlier rejecton
             threshold. Defaults to (1, 99).
 
     Returns:
@@ -303,7 +303,7 @@ def kmeans_temporal_cluster(
     Args:
         image (np.array): input greayscale image
         n_clusters (int, optional): number of grey scales. Defaults to 5.
-        quantile_range (tuple, optional): RobustScaler outlier rejecton 
+        quantile_range (tuple, optional): RobustScaler outlier rejecton
             threshold. Defaults to (1, 99).
 
     Returns:
@@ -584,9 +584,9 @@ def compute_ndvi_for_all(
     Args:
         jp2_data (dict): JSON like dict for data structure
         n_sig (int, optional): number of sigma to compute NDVIs. Defaults to 10.
-        verbose (bool, optional): Allow Info messages to be printed. 
+        verbose (bool, optional): Allow Info messages to be printed.
             Defaults to False.
-        verbose_plot (bool, optional): Allow sanity plots to be displayed. 
+        verbose_plot (bool, optional): Allow sanity plots to be displayed.
             Defaults to False.
 
     Returns:
@@ -661,13 +661,13 @@ def compute_spatial_kmeans(
 
     Args:
         jp2_data (dict): JSON like dict for data structure for
-        n_clusters (int, optional): number of clusters to compute K-Means over. 
+        n_clusters (int, optional): number of clusters to compute K-Means over.
             Defaults to 5.
-        quantile_range (tuple, optional): RobustScaler outlier rejecton 
+        quantile_range (tuple, optional): RobustScaler outlier rejecton
             threshold. Defaults to (1, 99).
-        verbose (bool, optional): Allow Info messages to be printed. 
+        verbose (bool, optional): Allow Info messages to be printed.
             Defaults to False.
-        verbose_plot (bool, optional): Allow sanity plots to be displayed. 
+        verbose_plot (bool, optional): Allow sanity plots to be displayed.
             Defaults to False.
 
     Returns:
@@ -709,13 +709,13 @@ def compute_temporal_kmeans(
 
     Args:
         jp2_data (dict): JSON like dict for data file_structure
-        n_clusters (int, optional): Number of clusters to compute K-Means over. 
+        n_clusters (int, optional): Number of clusters to compute K-Means over.
             Defaults to 5.
-        quantile_range (tuple, optional): RobustScaler outlier rejecton 
+        quantile_range (tuple, optional): RobustScaler outlier rejecton
             threshold. Defaults to (1, 99).
-        verbose (bool, optional): Allow Info messages to be printed. 
+        verbose (bool, optional): Allow Info messages to be printed.
             Defaults to False.
-        verbose_plot (bool, optional): Allow sanity plots to be displayed. 
+        verbose_plot (bool, optional): Allow sanity plots to be displayed.
             Defaults to False.
 
     Returns:
