@@ -1,4 +1,5 @@
 # from logging import warn
+from logging import debug, warning
 import boto3
 import geopandas as gpd
 import json
@@ -185,7 +186,9 @@ def get_coords_from_geometry(gdf):
     return coords
 
 
-def compute_ndvi(band04, band08, n_sig=10):
+def compute_ndvi(
+        band04, band08, n_sig=10, verbose_plot=False,
+        scene_id=None, res=None, date=None, bins=100):
     """Compute the NDVI image from band08 and band04 values
 
     Args:
@@ -238,6 +241,11 @@ def compute_ndvi(band04, band08, n_sig=10):
 
     outliers = abs(ndvi_masked - med_ndvi) > n_sig*std_ndvi
     ndvi_masked[outliers] = med_ndvi
+
+    if verbose_plot:
+        sanity_check_ndvi_statistics(
+            ndvi_masked, scene_id, res, date, bins=bins
+        )
 
     return ndvi_masked, mask_transform
 
@@ -349,6 +357,7 @@ def sanity_check_ndvi_statistics(image, scene_id, res, date, bins=100):
     plt.figure()
     plt.hist(image.ravel()[(image.ravel() != 0)], bins=bins)
     plt.title(f"NDVI Hist: {scene_id} - {res} - {date}")
+    plt.show()
 
 
 def sanity_check_spatial_kmeans(
@@ -376,7 +385,13 @@ def sanity_check_spatial_kmeans(
     for k in range(kmeans.n_clusters):
         axs[k+1].imshow((cluster_pred == k).reshape(image.shape))
 
-    plt.subplots_adjust(wspace=1e-2)
+    plt.subplots_adjust(
+        left=0,
+        right=1,
+        bottom=0,
+        top=1,
+        wspace=1e-2
+    )
     plt.show()
 
 
@@ -430,6 +445,203 @@ def sanity_check_temporal_kmeans(
         wspace=1e-2
     )
     plt.show()
+
+
+def download_and_acquire_images(items_geojson):
+
+    # Log all filepaths to queried scenes
+    if clargs.download:
+        # Loop over GeoJSON Features
+        for feat_ in items_geojson['features']:  # tqdm(
+            # Loop over GeoJSON Bands
+            for band_name_ in band_names:  # tqdm(
+                # if not band_name_ in filepaths.keys():
+                #     filepaths[band_name_] = []
+                # Download the selected bands
+                _ = download_tile_band(  # filepath_
+                    feat_['assets'][band_name_.upper()]['href'],
+                    s3_client=s3_client
+                )
+                # filepaths[band_name_].append(filepath_)
+
+    filepaths = {}
+    # Loop over GeoJSON Features to Allocate all requested files
+    for feat_ in items_geojson['features']:
+        # Loop over GeoJSON Bands
+        for band_name_ in band_names:
+            if not band_name_ in filepaths.keys():
+                filepaths[band_name_] = []
+
+            # Download the selected bands
+            href = feat_['assets'][band_name_.upper()]['href']
+            _, output_filepath = get_prefix_filepath(
+                href, collection=clargs.collection
+            )
+            filepaths[band_name_].append(output_filepath)
+
+    return filepaths
+
+
+def load_data_into_struct(filepaths):
+    # Load all data into JSON data structure
+    debug_message(f"filepaths.keys():{filepaths.keys()}")
+    jp2_data = {}
+    for band_name_, filepaths_ in filepaths.items():
+        # loop over band names
+        for fpath_ in filepaths_:
+            # loop over file paths
+            if not os.path.exists(fpath_):
+                warning_message(f"{fpath_} does not exist")
+                continue
+
+            # Use filepath to identify scene_id, res, and date
+            _, scene_id_, res_, date_, _ = fpath_.split('/')
+
+            # Adjust month from 1 to 2 digits if necessary
+            year_, month_, day_ = date_.split('-')
+            month_ = f"{month_:0>2}"
+            date_ = f"{year_}-{month_}-{day_}"
+
+            # Build up data structure for easier access later
+            if scene_id_ not in jp2_data.keys():
+                jp2_data[scene_id_] = {}
+            if res_ not in jp2_data[scene_id_].keys():
+                jp2_data[scene_id_][res_] = {}
+            if date_ not in jp2_data[scene_id_][res_].keys():
+                jp2_data[scene_id_][res_][date_] = {}
+            if band_name_ not in jp2_data[scene_id_][res_][date_].keys():
+                jp2_data[scene_id_][res_][date_][band_name_] = {}
+
+            if clargs.verbose:
+                info_message(f"{fpath_} :: {os.path.exists(fpath_)}")
+
+            raster_ = rasterio.open(fpath_, driver='JP2OpenJPEG')
+            # rast_data_ = raster_.read()
+
+            jp2_data[scene_id_][res_][date_][band_name_]['raster'] = raster_
+            # jp2_data[scene_id_][res_][date_][band_name_]['data'] = rast_data_
+
+    return jp2_data
+
+
+def compute_ndvi_for_all(jp2_data, n_sig=10):
+
+    # Compute NDVI for each Scene, Resolution, and Date
+    for scene_id_, res_dict_ in jp2_data.items():
+        for res_, date_dict_ in res_dict_.items():
+            for date_, band_data_ in date_dict_.items():
+                if not 'B04' in band_data_.keys() and \
+                        not 'B08' in band_data_.keys():
+                    warning_message(
+                        'NDVI cannot be computed without both Band04 and Band08'
+                    )
+                    continue
+
+                debug_message(f"band_data_.keys():{band_data_.keys()}")
+                # Compute NDVI for individual scene, res, date
+                ndvi_masked_, mask_transform_ = compute_ndvi(
+                    band_data_['B04'],
+                    band_data_['B08'],
+                    n_sig=n_sig,
+                    scene_id=scene_id_,
+                    res=res_,
+                    date=date_,
+                    bins=100
+                )
+
+                # # Compute K-Means Spatial Clustering per Image
+                # kmeans_ = kmeans_spatial_cluster(
+                #     ndvi_masked_,
+                #     n_clusters=5,
+                #     quantile_range=(1, 99),
+                #     verbose=clargs.verbose,
+                #     verbose_plot=clargs.verbose_plot
+                # )
+
+                # Store the NDVI and masked transform in data struct
+                jp2_data[scene_id_][res_][date_]['ndvi'] = ndvi_masked_
+                jp2_data[scene_id_][res_][date_]['transform'] = mask_transform_
+                # jp2_data[scene_id_][res_][date_]['kmeans_spatial'] = kmeans_
+
+    return jp2_data
+
+
+def allocate_ndvi_timeseries(jp2_data):
+
+    # Allocate NDVI timeseries for each Scene, Resolution, and Date
+    for scene_id_, res_dict_ in jp2_data.items():
+        for res_, date_dict_ in res_dict_.items():
+            timestamps_ = []
+            timeseries_ = []
+            for date_, dict_ in date_dict_.items():
+                if 'ndvi' not in dict_.keys():
+                    continue
+
+                if date_ != 'timeseries':
+                    timestamps_.append(datetime.fromisoformat(date_))
+                    timeseries_.append(dict_['ndvi'])
+
+            timeseries_ = np.array(timeseries_)
+            jp2_data[scene_id_][res_]['timeseries'] = {}
+            jp2_data[scene_id_][res_]['timeseries']['ndvi'] = timeseries_
+            jp2_data[scene_id_][res_]['timeseries']['timestamps'] = timestamps_
+
+    return jp2_data
+
+
+def compute_spatial_kmeans(jp2_data):
+
+    # Compute NDVI for each Scene, Resolution, and Date
+    for scene_id_, res_dict_ in jp2_data.items():
+        for res_, date_dict_ in res_dict_.items():
+            for date_, band_data_ in date_dict_.items():
+                if not 'B04' in band_data_.keys() and \
+                        not 'B08' in band_data_.keys():
+                    warning_message(
+                        'NDVI cannot be computed without both Band04 and Band08'
+                    )
+                    continue
+
+                # Compute K-Means Spatial Clustering per Image
+                kmeans_ = kmeans_spatial_cluster(
+                    jp2_data[scene_id_][res_][date_]['ndvi'],
+                    n_clusters=5,
+                    quantile_range=(1, 99),
+                    verbose=clargs.verbose,
+                    verbose_plot=clargs.verbose_plot
+                )
+
+                # Store the NDVI and masked transform in data struct
+                jp2_data[scene_id_][res_][date_]['kmeans_spatial'] = kmeans_
+
+    return jp2_data
+
+
+def compute_temporal_kmeans(jp2_data):
+    # Compute NDVI for each Scene, Resolution, and Date
+    for scene_id_, res_dict_ in jp2_data.items():
+        for res_, date_dict_ in res_dict_.items():
+            if 'timeseries' not in date_dict_.keys():
+                continue
+            if date_dict_['timeseries']['ndvi'].size == 0:
+                warning_message(
+                    f'Temporal NDVI does not exist for {scene_id_} at {res_}'
+                )
+                continue
+
+            # Compute K-Means Spatial Clustering per Image
+            kmeans_ = kmeans_temporal_cluster(
+                date_dict_['timeseries']['ndvi'],
+                n_clusters=5,
+                quantile_range=(1, 99),
+                verbose=clargs.verbose,
+                verbose_plot=clargs.verbose_plot
+            )
+
+            # Store the NDVI and masked transform in data struct
+            jp2_data[scene_id_][res_]['timeseries']['kmeans'] = kmeans_
+
+    return jp2_data
 
 
 if __name__ == '__main__':
@@ -512,176 +724,9 @@ if __name__ == '__main__':
 
     # Allocate MetaData in GeoJSON
     items_geojson = items.geojson()
-
-    # Log all filepaths to queried scenes
-    filepaths = {}
-    if clargs.download:
-        # Loop over GeoJSON Features
-        for feat_ in tqdm(items_geojson['features']):
-            # Loop over GeoJSON Bands
-            for band_name_ in tqdm(band_names):
-                if not band_name_ in filepaths.keys():
-                    filepaths[band_name_] = []
-                # Download the selected bands
-                filepath_ = download_tile_band(
-                    feat_['assets'][band_name_.upper()]['href'],
-                    s3_client=s3_client
-                )
-                filepaths[band_name_].append(filepath_)
-    else:
-        # Loop over GeoJSON Features
-        for feat_ in items_geojson['features']:
-            # Loop over GeoJSON Bands
-            for band_name_ in band_names:
-                if not band_name_ in filepaths.keys():
-                    filepaths[band_name_] = []
-                # Download the selected bands
-                href = feat_['assets'][band_name_.upper()]['href']
-                _, output_filepath = get_prefix_filepath(
-                    href, collection=clargs.collection
-                )
-                filepaths[band_name_].append(output_filepath)
-
-    # Load all data into JSON data structure
-    jp2_data = {}
-    for band_name_, filepaths_ in filepaths.items():
-        # loop over band names
-        for fpath_ in filepaths_:
-            # loop over file paths
-            if not os.path.exists(fpath_):
-                warning_message(f"{fpath_} does not exist")
-                continue
-
-            # Use filepath to identify scene_id, res, and date
-            _, scene_id_, res_, date_, _ = fpath_.split('/')
-
-            # Adjust month from 1 to 2 digits if necessary
-            year_, month_, day_ = date_.split('-')
-            month_ = f"{month_:0>2}"
-            date_ = f"{year_}-{month_}-{day_}"
-
-            # Build up data structure for easier access later
-            if scene_id_ not in jp2_data.keys():
-                jp2_data[scene_id_] = {}
-            if res_ not in jp2_data[scene_id_].keys():
-                jp2_data[scene_id_][res_] = {}
-            if date_ not in jp2_data[scene_id_][res_].keys():
-                jp2_data[scene_id_][res_][date_] = {}
-            if band_name_ not in jp2_data[scene_id_][res_][date_].keys():
-                jp2_data[scene_id_][res_][date_][band_name_] = {}
-
-            if clargs.verbose:
-                info_message(f"{fpath_} :: {os.path.exists(fpath_)}")
-
-            raster_ = rasterio.open(fpath_, driver='JP2OpenJPEG')
-            # rast_data_ = raster_.read()
-
-            jp2_data[scene_id_][res_][date_][band_name_]['raster'] = raster_
-            # jp2_data[scene_id_][res_][date_][band_name_]['data'] = rast_data_
-
-    # Compute NDVI for each Scene, Resolution, and Date
-    for scene_id_, res_dict_ in jp2_data.items():
-        for res_, date_dict_ in res_dict_.items():
-            for date_, band_data_ in date_dict_.items():
-
-                # Compute NDVI for individual scene, res, date
-                ndvi_masked_, mask_transform_ = compute_ndvi(
-                    band_data_['B04'],
-                    band_data_['B08'],
-                    n_sig=clargs.n_sig
-                )
-
-                # Compute K-Means Spatial Clustering per Image
-                kmeans_ = kmeans_spatial_cluster(
-                    ndvi_masked_,
-                    n_clusters=5,
-                    quantile_range=(1, 99),
-                    verbose=clargs.verbose,
-                    verbose_plot=clargs.verbose_plot
-                )
-
-                # Store the NDVI and masked transform in data struct
-                jp2_data[scene_id_][res_][date_]['ndvi'] = ndvi_masked_
-                jp2_data[scene_id_][res_][date_]['transform'] = mask_transform_
-                jp2_data[scene_id_][res_][date_]['kmeans_spatial'] = kmeans_
-
-                if clargs.verbose_plot:
-                    sanity_check_ndvi_statistics(
-                        ndvi_masked_, scene_id_, res_, date_, bins=100
-                    )
-
-    if clargs.verbose_plot:
-        plt.show()
-
-    # Make NDVI time series per scene and resolution
-
-    # Allocate NDVI timeseries for each Scene, Resolution, and Date
-    for scene_id_, res_dict_ in jp2_data.items():
-        for res_, date_dict_ in res_dict_.items():
-            timestamps_ = []
-            timeseries_ = []
-            for date_, dict_ in date_dict_.items():
-                if date_ != 'timeseries':
-                    timestamps_.append(datetime.fromisoformat(date_))
-                    timeseries_.append(dict_['ndvi'])
-
-            timeseries_ = np.array(timeseries_)
-            jp2_data[scene_id_][res_]['timeseries'] = {}
-            jp2_data[scene_id_][res_]['timeseries']['ndvi'] = timeseries_
-            jp2_data[scene_id_][res_]['timeseries']['timestamps'] = timestamps_
-
-    # Compute NDVI for each Scene, Resolution, and Date
-    for scene_id_, res_dict_ in jp2_data.items():
-        for res_, date_dict_ in res_dict_.items():
-            # Compute K-Means Spatial Clustering per Image
-            kmeans_ = kmeans_temporal_cluster(
-                date_dict_['timeseries']['ndvi'],
-                n_clusters=10,
-                quantile_range=(1, 99),
-                verbose=clargs.verbose,
-                verbose_plot=clargs.verbose_plot
-            )
-
-            # Store the NDVI and masked transform in data struct
-            jp2_data[scene_id_][res_]['timeseries']['kmeans'] = kmeans_
-
-            if clargs.verbose_plot:
-                sanity_check_ndvi_statistics(
-                    ndvi_masked_, scene_id_, res_, date_, bins=100
-                )
-
-    """
-            date_dict_sorted = dict(
-                sorted(
-                    date_dict_.items(),
-                    key=lambda x: datetime.fromisoformat(x[0])
-                )
-            )
-
-            timeseries_ = []
-            for date_, band_data_ in date_dict_sorted.items():
-                timeseries_.append(band_data_['ndvi'])
-
-            jp2_data[scene_id_][res_]['timeseries'] = timeseries_
-    """
-    """
-
-            # Compute K-Means Spatial Clustering per Image
-            kmeans_ = kmeans_spatial_cluster(
-                ndvi_masked_,
-                n_clusters=5,
-                quantile_range=(1, 99),
-                verbose=clargs.verbose,
-                verbose_plot=clargs.verbose_plot
-            )
-
-            # Store the NDVI and masked transform in data struct
-            jp2_data[scene_id_][res_][date_]['ndvi'] = ndvi_masked_
-            jp2_data[scene_id_][res_][date_]['transform'] = mask_transform_
-            jp2_data[scene_id_][res_][date_]['kmeans_spatial'] = kmeans_
-
-            if clargs.verbose_plot:
-                sanity_check_ndvi_statistics(
-                    ndvi_masked_, scene_id_, res_, date_, bins=100
-                )
-    """
+    filepaths = download_and_acquire_images(items_geojson)
+    jp2_data = load_data_into_struct(filepaths)
+    jp2_data = compute_ndvi_for_all(jp2_data, n_sig=clargs.n_sig)
+    jp2_data = allocate_ndvi_timeseries(jp2_data)
+    jp2_data = compute_spatial_kmeans(jp2_data)
+    jp2_data = compute_temporal_kmeans(jp2_data)
