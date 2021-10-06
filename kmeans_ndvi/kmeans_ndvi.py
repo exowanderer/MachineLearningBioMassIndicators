@@ -25,18 +25,13 @@ from .utils import (
 )
 
 
-class KMeansNDVI(object):
-    """Class to contain STAC Sentinel-2 Data Structure
-    """
+class SentinelAOI(object):
 
     def __init__(
             self, geojson: str,
             start_date: str = '2020-01-01', end_date: str = '2020-02-01',
             cloud_cover: int = 1, collection: str = 'sentinel-s2-l2a',
-            band_names: list = ['B04', 'B08'], download: bool = False,
-            n_clusters: int = 5, n_sig: int = 10,
-            quantile_range: list = [1, 99], verbose: bool = False,
-            verbose_plot: bool = False, hist_bins: int = 100):
+            band_names: list = ['B04', 'B08'], download: bool = False):
         """[summary]
 
         Args:
@@ -75,12 +70,6 @@ class KMeansNDVI(object):
         self.collection = collection
         self.band_names = band_names
         self.download = download
-        self.n_clusters = n_clusters
-        self.n_sig = n_sig
-        self.quantile_range = quantile_range
-        self.verbose = verbose
-        self.verbose_plot = verbose_plot
-        self.hist_bins = hist_bins
 
     def search_earth_aws(self):
         """Organize input parameters and call search query to AWS STAC API
@@ -200,6 +189,59 @@ class KMeansNDVI(object):
                 raster_ = {}
                 raster_['raster'] = rasterio.open(fpath_, driver='JP2OpenJPEG')
                 self.scenes[scene_id_][res_][date_][band_name_] = raster_
+
+
+class KMeansNDVI(SentinelAOI):
+    """Class to contain STAC Sentinel-2 Data Structure
+    """
+
+    def __init__(
+            self, geojson: str,
+            start_date: str = '2020-01-01', end_date: str = '2020-02-01',
+            cloud_cover: int = 1, collection: str = 'sentinel-s2-l2a',
+            band_names: list = ['B04', 'B08'], download: bool = False,
+            n_clusters: int = 5, n_sig: int = 10,
+            quantile_range: list = [1, 99], verbose: bool = False,
+            verbose_plot: bool = False, hist_bins: int = 100):
+        """[summary]
+
+        Args:
+            geojson (str): filepath to geojson for AOI
+            start_date (str, optional): start date for STAC query.
+                Defaults to '2020-01-01'.
+            end_date (str, optional): end date for STAC Query.
+                Defaults to '2020-02-01'.
+            cloud_cover (int, optional): Percent cloud cover maximum.
+                Defaults to 1.
+            collection (str, optional): S3 bucket collection for STAC_API_URL.
+                Defaults to 'sentinel-s2-l2a'.
+            band_names (list, optional): Sentinel-2 band names.
+                Defaults to ['B04', 'B08'].
+            download (bool, optional): Flag whether to initate a download
+                (costs money). Defaults to False.
+            n_clusters (int, optional): number of clusters to operate K-Means.
+                Defaults to 5.
+            n_sig (int, optional): Number of sigma to flag outliers.
+                Defaults to 10.
+            quantile_range (list, optional): Range of distribution to
+                RobustScale. Defaults to [1, 99].
+            verbose (bool, optional): Flag whether to output extra print
+                statemetns to stdout. Defaults to False.
+            verbose_plot (bool, optional): Flag whether to display extra
+                matplotlib figures. Defaults to False.
+            hist_bins (int, optional): number of bins in matplotlib plt.hist.
+                Defaults to 100.
+        """
+        super().__init__(
+            geojson, start_date, end_date, cloud_cover, collection,
+            band_names, download
+        )
+        self.n_clusters = n_clusters
+        self.n_sig = n_sig
+        self.quantile_range = quantile_range
+        self.verbose = verbose
+        self.verbose_plot = verbose_plot
+        self.hist_bins = hist_bins
 
     def compute_ndvi_for_all(self):
         """Cycle over self.scenes and compute NDVI for each scene and date_
