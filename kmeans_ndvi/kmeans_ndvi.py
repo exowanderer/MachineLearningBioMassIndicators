@@ -284,8 +284,21 @@ class KMeansNDVI(object):
                         date=date_
                     )
 
-                    # Store the NDVI and masked transform in data struct
-                    self.scenes[scene_id_][res_][date_]['kmeans'] = kmeans_
+                    # # Store the NDVI and masked transform in data struct
+                    # if 'kmeans' not in self.scenes[scene_id_][res_][date_]:
+                    #     kdict_ = {}
+                    # else:
+                    #     kdict_ = self.scenes[scene_id_][res_][date_]['kmeans']
+
+                    # if n_clusters in kdict_.keys():
+                    #     del kdict_[n_clusters]
+
+                    kdict_ = self.scenes[scene_id_][res_][date_]
+                    if 'kmeans' not in kdict_.keys():
+                        kdict_['kmeans'] = {}
+
+                    kdict_['kmeans'][n_clusters] = kmeans_
+                    self.scenes[scene_id_][res_][date_] = kdict_
 
     def compute_temporal_kmeans(self, n_clusters=None):
         """Cycle over all NDVI time series and Compute NDVI for each Scene,
@@ -315,4 +328,21 @@ class KMeansNDVI(object):
                 )
 
                 # Store the NDVI and masked transform in data struct
-                self.scenes[scene_id_][res_]['timeseries']['kmeans'] = kmeans_
+                # self.scenes[scene_id_][res_]['timeseries']['kmeans'] = kmeans_
+
+                # Store the NDVI and masked transform in data struct
+                # if 'kmeans' not in self.scenes[scene_id_][res_]['timeseries']:
+                #     kdict_ = {}
+                # else:
+                #     kdict_ = self.scenes[scene_id_][res_]
+                #     kdict_ = kdict_['timeseries']['kmeans']
+
+                # kdict_[n_clusters] = kmeans_
+                # self.scenes[scene_id_][res_]['timeseries']['kmeans'] = kdict_
+
+                kdict_ = self.scenes[scene_id_][res_]['timeseries']
+                if 'kmeans' not in kdict_.keys():
+                    kdict_['kmeans'] = {}
+
+                kdict_['kmeans'][n_clusters] = kmeans_
+                self.scenes[scene_id_][res_]['timeseries'] = kdict_
