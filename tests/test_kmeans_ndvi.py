@@ -116,6 +116,7 @@ def test_load_data_into_struct():
                     assert(band_name_ in val.keys())
 
 
+"""
 def test_compute_ndvi_for_all():
     pass
 
@@ -142,3 +143,4 @@ def test_sanity_check_spatial_kmeans():
 
 def test_sanity_check_temporal_kmeans():
     pass
+"""
