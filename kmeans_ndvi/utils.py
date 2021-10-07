@@ -71,7 +71,7 @@ def geom_to_bounding_box(gdf):
         gdf (gpd.GeoDataFrame): GeoDataFrame with input set of geometries
 
     Returns:
-        dict: dicitonary representing a GeoJSON input with only the bounding box
+        dict: GeoJSON input with only the bounding box
     """
 
     # Find bounding box coordinates
@@ -106,7 +106,8 @@ def get_prefix_filepath(href, collection='sentinel-s2-l2a'):
 
     Args:
         href (str): s3 url for single scene from satsearch service
-        collection (str, optional): AWS bucket from which to grab jp2 files. Defaults to 'sentinel-s2-l2a'.
+        collection (str, optional): AWS bucket from which to grab jp2 files.
+            Defaults to 'sentinel-s2-l2a'.
 
     Returns:
         tuple (str, str): `prefix` and `output_filepath` for boto3
@@ -171,7 +172,8 @@ def download_tile_band(href, collection='sentinel-s2-l2a', s3_client=None):
 
 
 def get_coords_from_geometry(gdf):
-    """Function to parse features from GeoDataFrame in such a manner that rasterio wants them
+    """Function to parse features from GeoDataFrame in such a manner
+        that rasterio wants them
 
     Args:
         gdf (gpd.GeoDataFrame): gdf with list of geometries for each AOI
@@ -243,7 +245,7 @@ def compute_ndvi(
     std_ndvi = scale.mad(ndvi_masked.ravel()) * mad2std
 
     # Identify outliers as points outside nsig x std_ndvi from median
-    outliers = abs(ndvi_masked - med_ndvi) > n_sig*std_ndvi
+    outliers = abs(ndvi_masked - med_ndvi) > n_sig * std_ndvi
 
     # Set outliers to median value
     ndvi_masked[outliers] = med_ndvi
@@ -423,7 +425,7 @@ def sanity_check_spatial_kmeans(kmeans, image, quantile_range=(1, 99),
     base_fig_size = 5  # Each sub figure will be base_fig_size x base_fig_size
     fig, axs = plt.subplots(
         ncols=kmeans.n_clusters + 1,
-        figsize=(base_fig_size*(kmeans.n_clusters + 1), base_fig_size)
+        figsize=(base_fig_size * (kmeans.n_clusters + 1), base_fig_size)
     )
 
     # Plot the entire cluster_pred image
@@ -431,7 +433,7 @@ def sanity_check_spatial_kmeans(kmeans, image, quantile_range=(1, 99),
 
     # Cycle through and plot each cluster_pred image per 'class'
     for k in range(kmeans.n_clusters):
-        axs[k+1].imshow(
+        axs[k + 1].imshow(
             (cluster_pred == k).reshape(image.shape),
             interpolation='None'
         )
@@ -498,7 +500,7 @@ def sanity_check_temporal_kmeans(
     base_fig_size = 5  # Each sub figure will be base_fig_size x base_fig_size
     fig, axs = plt.subplots(
         ncols=kmeans.n_clusters + 2,
-        figsize=(base_fig_size*(kmeans.n_clusters + 1), base_fig_size)
+        figsize=(base_fig_size * (kmeans.n_clusters + 1), base_fig_size)
     )
 
     # Plot the entire cluster_pred image
@@ -509,7 +511,7 @@ def sanity_check_temporal_kmeans(
 
     # Cycle through and plot each cluster_pred image per 'class'
     for k in range(kmeans.n_clusters):
-        axs[k+2].imshow((cluster_image == (k+1)), interpolation='None')
+        axs[k + 2].imshow((cluster_image == (k + 1)), interpolation='None')
 
     # Remove all unnecessary markers from figure
     [ax.grid(False) for ax in axs.ravel()]  # remove grid for images
