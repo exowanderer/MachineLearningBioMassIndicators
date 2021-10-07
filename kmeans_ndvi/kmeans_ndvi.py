@@ -4,10 +4,10 @@ import numpy as np
 import os
 import rasterio
 
+from dataclasses import dataclass, field
 from datetime import datetime
-# from logging import warn
-# from logging import debug, warning
 from tqdm import tqdm
+from typing import List
 
 from satsearch import Search
 
@@ -23,6 +23,26 @@ from .utils import (
     warning_message,
     debug_message
 )
+
+
+@dataclass
+class SentinelAOIParams:
+    """Class for KMeansNDVI Input Params"""
+    geojson: str = 'doberitz_multipolygon.geojson'
+    scene_id: str = None
+    band_names: List[str] = field(default_factory=lambda: ['B04', 'B08'])
+    collection: str = 'sentinel-s2-l2a'
+    start_date: str = '2020-01-01'
+    end_date: str = '2020-02-01'
+    cloud_cover: float = 1
+    n_sig: int = 10
+    download: bool = True
+    env_filename: str = '.env'
+    n_clusters: int = 5
+    quantile_range: List[int] = field(default_factory=lambda: [1, 99])
+    verbose: bool = False
+    verbose_plot: bool = False
+    quiet: bool = True
 
 
 class SentinelAOI(object):
