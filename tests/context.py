@@ -7,7 +7,8 @@ from kmeans_ndvi import (
     SentinelAOI,
     SentinelAOIParams,
     KMeansNDVI,
-    KMeansNDVIParams
+    KMeansNDVIParams,
+    debug_message
 )
 
 # Path hacks to make the code available for testing

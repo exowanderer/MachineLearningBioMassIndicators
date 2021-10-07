@@ -1,6 +1,13 @@
 """List of tests for PyTests"""
+import os
 import pytest
-from context import SentinelAOI, SentinelAOIParams, KMeansNDVI, KMeansNDVIParams
+from context import (
+    SentinelAOI,
+    SentinelAOIParams,
+    KMeansNDVI,
+    KMeansNDVIParams,
+    debug_message
+)
 
 
 def test_SentinelAOI():
@@ -33,11 +40,57 @@ def test_KMeansNDVI():
 
 
 def test_download_and_acquire_images():
-    pass
+    expected_filepaths = {
+        'B04': [
+            'sentinel-s2-l2a/33UUU/R10m/2020-1-24/B04.jp2',
+            'sentinel-s2-l2a/32UQD/R10m/2020-1-24/B04.jp2',
+            'sentinel-s2-l2a/32UQD/R10m/2020-1-17/B04.jp2',
+            'sentinel-s2-l2a/33UUU/R10m/2020-1-17/B04.jp2'
+        ],
+        'B08': [
+            'sentinel-s2-l2a/33UUU/R10m/2020-1-24/B08.jp2',
+            'sentinel-s2-l2a/32UQD/R10m/2020-1-24/B08.jp2',
+            'sentinel-s2-l2a/32UQD/R10m/2020-1-17/B08.jp2',
+            'sentinel-s2-l2a/33UUU/R10m/2020-1-17/B08.jp2'
+        ]
+    }
+
+    kmean_ndvi_params = KMeansNDVIParams()
+    kmean_ndvi_params.band_names = ['B04', 'B08']
+    kmean_ndvi_params.start_date = '2020-01-01'
+    kmean_ndvi_params.end_date = '2020-02-01'
+
+    assert(os.path.exists(kmean_ndvi_params.geojson)),\
+        f"GeoJSON file {kmean_ndvi_params.geojson} does not exist"
+
+    instance = KMeansNDVI(**kmean_ndvi_params.__dict__)
+    instance.download_and_acquire_images()
+    instance_filepaths = instance.filepaths
+    for band_name_, filepaths_ in expected_filepaths.items():
+        assert(band_name_ in instance_filepaths.keys()),\
+            f"{band_name_} not in instance.filepaths.keys()"
+
+        assert(len(instance_filepaths[band_name_]) == len(filepaths_)),\
+            "length of instance.filepaths does not match expected length"
+
+        for instfpath, expfpaths in zip(instance_filepaths, expected_filepaths):
+            assert(instfpath == expfpaths),\
+                "found mismatched file path from instance to expected"
 
 
 def test_load_data_into_struct():
-    pass
+    kmean_ndvi_params = KMeansNDVIParams()
+    kmean_ndvi_params.band_names = ['B04', 'B08']
+    kmean_ndvi_params.start_date = '2020-01-01'
+    kmean_ndvi_params.end_date = '2020-02-01'
+    kmean_ndvi_params.download = True
+
+    assert(os.path.exists(kmean_ndvi_params.geojson)),\
+        f"GeoJSON file {kmean_ndvi_params.geojson} does not exist"
+
+    instance = KMeansNDVI(**kmean_ndvi_params.__dict__)
+    instance.download_and_acquire_images()
+    instance.load_data_into_struct()
 
 
 def test_compute_ndvi_for_all():

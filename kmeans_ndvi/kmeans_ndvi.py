@@ -1,9 +1,11 @@
 """Class definitions for kmeans_ndvi module"""
 import boto3
-import geopandas as gpd
-import numpy as np
+import joblib
 import os
 import rasterio
+
+import geopandas as gpd
+import numpy as np
 
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -12,7 +14,6 @@ from typing import List
 
 from satsearch import Search
 
-# TODO: change from utils to .utils when modularizing
 from .utils import (
     geom_to_bounding_box,
     get_prefix_filepath,
@@ -169,6 +170,8 @@ class SentinelAOI:
                 # Loop over GeoJSON Bands
                 band_iter = tqdm(self.band_names, disable=self.quiet)
                 for bnd_name_ in band_iter:
+                    if bnd_name_.upper() not in feat_['assets'].keys():
+                        continue
                     # Download the selected bands
                     _ = download_tile_band(  # filepath_
                         feat_['assets'][bnd_name_.upper()]['href'],
@@ -183,6 +186,9 @@ class SentinelAOI:
                 if bnd_name_ not in self.filepaths.keys():
                     # Check if this is the first file per band
                     self.filepaths[bnd_name_] = []
+
+                if bnd_name_.upper() not in feat_['assets'].keys():
+                    continue
 
                 # Download the selected bands
                 href = feat_['assets'][bnd_name_.upper()]['href']
@@ -241,6 +247,21 @@ class SentinelAOI:
 
                 # Store the raster in the self.scenes data structure
                 self.scenes[scene_id_][res_][date_][bnd_name_] = raster_
+
+    def save_results(self, save_filename):
+        info_message(f'Saving Results to JobLib file: {save_filename}')
+        save_dict_ = {}
+        for key, val in self.__dict__.items():
+            if not hasattr(val, '__call__'):
+                save_dict_[key] = val
+
+        joblib.dump(save_dict_, save_filename)
+
+    def load_results(self, load_filename):
+        load_dict_ = joblib.load(load_filename)
+        for key, val in load_dict_.items():
+            if not hasattr(val, '__call__'):
+                self.__dict__[key] = val
 
     def __add__(self, instance):
         """Concatenate to this SentinelAOI instance the data from a second
