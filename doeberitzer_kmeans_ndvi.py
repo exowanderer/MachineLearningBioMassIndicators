@@ -2,7 +2,12 @@ from argparse import ArgumentParser
 from dotenv import load_dotenv
 from matplotlib import pyplot as plt
 
-from kmeans_ndvi import KMeansNDVI, info_message, warning_message, debug_message
+from kmeans_ndvi import (
+    KMeansNDVI,
+    info_message,
+    warning_message,
+    debug_message
+)
 
 
 if __name__ == "__main__":
@@ -20,7 +25,9 @@ if __name__ == "__main__":
 
     OR
 
-    python doeberitzer_kmeans_ndvi.py --band_names b04 b08 --start_date 2020-01-01 --end_date 2020-02-01 --cloud_cover 1 --download --verbose --verbose_plot
+    python doeberitzer_kmeans_ndvi.py --band_names b04 b08 --start_date
+    2020-01-01 --end_date 2020-02-01 --cloud_cover 1 --download --verbose
+    --verbose_plot
     """
 
     args = ArgumentParser(prog="Doeberitzer K-Means NDVI")
