@@ -129,7 +129,7 @@ info_message(jp2_data)
 
     INFO | utils.py:23 in info_message()
            message: SentinelAOI:
-                                AOI: doberitz_multipolygon.geojson
+                                AOI: doeberitzer_multipolygon.geojson
                          Start Date: 2020-01-01
                            End Date: 2020-02-01
                     Cloud Cover Max: 1

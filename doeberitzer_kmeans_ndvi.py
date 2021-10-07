@@ -15,7 +15,7 @@ if __name__ == '__main__':
     example_usage = """
     Use case:
 
-    python doberitz_kmeans_ndvi.py \
+    python doeberitzer_kmeans_ndvi.py \
         --band_names b04 b08\
         --start_date 2020-01-01 \
         --end_date 2020-02-01 \
@@ -26,12 +26,12 @@ if __name__ == '__main__':
 
     OR
 
-    python doberitz_kmeans_ndvi.py --band_names b04 b08 --start_date 2020-01-01 --end_date 2020-02-01 --cloud_cover 1 --download --verbose --verbose_plot
+    python doeberitzer_kmeans_ndvi.py --band_names b04 b08 --start_date 2020-01-01 --end_date 2020-02-01 --cloud_cover 1 --download --verbose --verbose_plot
     """
 
-    args = ArgumentParser(prog='Doberitz K-Means NDVI')
+    args = ArgumentParser(prog='Doeberitzer K-Means NDVI')
     args.add_argument(
-        '--geojson', type=str, default='doberitz_multipolygon.geojson'
+        '--geojson', type=str, default='doeberitzer_multipolygon.geojson'
     )
     args.add_argument('--scene_id', type=str)
     args.add_argument('--band_names', nargs='+', default=['B04', 'B08'])

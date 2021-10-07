@@ -28,7 +28,7 @@ from .utils import (
 @dataclass
 class SentinelAOIParams:
     """Class for KMeansNDVI Input Params"""
-    geojson: str = 'doberitz_multipolygon.geojson'
+    geojson: str = 'doeberitzer_multipolygon.geojson'
     scene_id: str = None
     band_names: List[str] = field(default_factory=lambda: ['B04', 'B08'])
     collection: str = 'sentinel-s2-l2a'
