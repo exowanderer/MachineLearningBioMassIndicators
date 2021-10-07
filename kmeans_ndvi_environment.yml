@@ -1,4 +1,4 @@
-name: up42
+name: kmeans_ndvi
 channels:
   - conda-forge
   - defaults
@@ -323,7 +323,6 @@ dependencies:
   - zstd=1.5.0=ha95c52a_0
   - pip:
     - area==1.1.1
-    - fake-geo-images==0.1.1
     - filelock==3.1.0
     - imageio==2.9.0
     - morecantile==2.1.4
@@ -333,5 +332,4 @@ dependencies:
     - rio-cogeo==2.3.1
     - scikit-image==0.18.3
     - tifffile==2021.8.30
-    - up42-blockutils==1.0.2
-prefix: /home/jonathan/anaconda3/envs/up42
+prefix: /home/jonathan/anaconda3/envs/kmeans_ndvi

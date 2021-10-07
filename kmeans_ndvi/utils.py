@@ -366,18 +366,37 @@ def sanity_check_ndvi_statistics(
     """
 
     # Sanity Check with imshow
-    fig, ax = plt.subplots()
-    plt.imshow(image, interpolation='None')
-    fig.suptitle(f"NDVI Image: {scene_id} - {res} - {date}")
+    fig, (ax1, ax2) = plt.subplots(ncols=2, figsize=(20, 5))
+    ax1.imshow(image, interpolation='None')
+    ax1.set_title(
+        f"NDVI Image: {scene_id} - {res} - {date}",
+        fontsize=20
+    )
+
     # Remove all unnecessary markers from figure
-    ax.grid(False)  # remove grid for images
-    ax.xaxis.set_ticks([])  # remove xticks
-    ax.yaxis.set_ticks([])  # remove xticks
+    ax1.grid(False)  # remove grid for images
+    ax1.xaxis.set_ticks([])  # remove xticks
+    ax1.yaxis.set_ticks([])  # remove xticks
 
     # Sanity Check with visual histogram
-    fig = plt.figure()
-    plt.hist(image.ravel()[(image.ravel() != 0)], bins=bins)
-    fig.suptitle(f"NDVI Hist: {scene_id} - {res} - {date}")
+    ax2.hist(image.ravel()[(image.ravel() != 0)], bins=bins)
+    for tick in ax2.xaxis.get_major_ticks():
+        tick.label.set_fontsize(20)
+    for tick in ax2.yaxis.get_major_ticks():
+        tick.label.set_fontsize(20)
+
+    plt.subplots_adjust(
+        left=0,
+        right=1,
+        bottom=0,
+        top=.90,
+        wspace=1e-2
+    )
+
+    ax2.set_title(
+        f"NDVI Hist: {scene_id} - {res} - {date}",
+        fontsize=20
+    )
 
     if plot_now:
         plt.show()
@@ -427,13 +446,15 @@ def sanity_check_spatial_kmeans(kmeans, image, quantile_range=(1, 99),
         left=0,
         right=1,
         bottom=0,
-        top=1,
+        top=0.9,
         wspace=1e-2
     )
 
     # Set title for entire figure
     fig.suptitle(
-        f"Spatial K-Means Reconstruction: {scene_id} - {res} - {date}")
+        f"Spatial K-Means Reconstruction: {scene_id} - {res} - {date}",
+        fontsize=20
+    )
 
     if plot_now:
         # User can override default behaviour and plot on-the-fly
@@ -500,12 +521,15 @@ def sanity_check_temporal_kmeans(
         left=0,
         right=1,
         bottom=0,
-        top=1,
+        top=0.9,
         wspace=1e-2
     )
 
     # Set title for entire figure
-    fig.suptitle(f"Temporal K-Means Reconstruction: {scene_id} - {res}")
+    fig.suptitle(
+        f"Temporal K-Means Reconstruction: {scene_id} - {res}",
+        fontsize=20
+    )
 
     if plot_now:
         # User can override default behaviour and plot on-the-fly
