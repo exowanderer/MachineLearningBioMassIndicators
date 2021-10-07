@@ -368,7 +368,10 @@ def sanity_check_ndvi_statistics(
     # Sanity Check with imshow
     fig, (ax1, ax2) = plt.subplots(ncols=2, figsize=(20, 5))
     ax1.imshow(image, interpolation='None')
-    fig.suptitle(f"NDVI Image: {scene_id} - {res} - {date}")
+    ax1.set_title(
+        f"NDVI Image: {scene_id} - {res} - {date}",
+        fontsize=20
+    )
 
     # Remove all unnecessary markers from figure
     ax1.grid(False)  # remove grid for images
@@ -386,7 +389,10 @@ def sanity_check_ndvi_statistics(
         wspace=1e-2
     )
 
-    fig.suptitle(f"NDVI Hist: {scene_id} - {res} - {date}")
+    ax2.set_title(
+        f"NDVI Hist: {scene_id} - {res} - {date}",
+        fontsize=20
+    )
 
     if plot_now:
         plt.show()
@@ -442,7 +448,9 @@ def sanity_check_spatial_kmeans(kmeans, image, quantile_range=(1, 99),
 
     # Set title for entire figure
     fig.suptitle(
-        f"Spatial K-Means Reconstruction: {scene_id} - {res} - {date}")
+        f"Spatial K-Means Reconstruction: {scene_id} - {res} - {date}",
+        fontsize=20
+    )
 
     if plot_now:
         # User can override default behaviour and plot on-the-fly
@@ -514,7 +522,10 @@ def sanity_check_temporal_kmeans(
     )
 
     # Set title for entire figure
-    fig.suptitle(f"Temporal K-Means Reconstruction: {scene_id} - {res}")
+    fig.suptitle(
+        f"Temporal K-Means Reconstruction: {scene_id} - {res}",
+        fontsize=20
+    )
 
     if plot_now:
         # User can override default behaviour and plot on-the-fly
