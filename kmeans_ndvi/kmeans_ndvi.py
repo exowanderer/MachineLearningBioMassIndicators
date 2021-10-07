@@ -111,7 +111,7 @@ class SentinelAOI(object):
         # Build a GeoJSON bounding box around AOI(s)
         bounding_box = geom_to_bounding_box(self.gdf)
 
-        # Use Sat-Search to idenitify and load all meta data within search field
+        # Use Sat-Search to idenitify and load all meta data from search field
         self.search = Search(
             url=self.url_earth_search,
             intersects=bounding_box['features'][0]['geometry'],
@@ -167,7 +167,7 @@ class SentinelAOI(object):
         for feat_ in self.items_geojson['features']:
             # Loop over GeoJSON Bands
             for band_name_ in self.band_names:
-                if not band_name_ in self.filepaths.keys():
+                if band_name_ not in self.filepaths.keys():
                     # Check if this is the first file per band
                     self.filepaths[band_name_] = []
 
@@ -384,8 +384,8 @@ class KMeansNDVI(SentinelAOI):
             for res_, date_dict_ in res_iter:
                 date_iter = tqdm(date_dict_.items(), disable=self.quiet)
                 for date_, band_data_ in date_iter:
-                    if not 'B04' in band_data_.keys() and \
-                            not 'B08' in band_data_.keys():
+                    if 'B04' not in band_data_.keys() and \
+                            'B08' not in band_data_.keys():
                         warning_message(
                             'NDVI cannot be computed without '
                             'both Band04 and Band08'
@@ -468,8 +468,8 @@ class KMeansNDVI(SentinelAOI):
             for res_, date_dict_ in res_iter:
                 date_iter = tqdm(date_dict_.items(), disable=self.quiet)
                 for date_, band_data_ in date_iter:
-                    if not 'B04' in band_data_.keys() and \
-                            not 'B08' in band_data_.keys():
+                    if 'B04' not in band_data_.keys() and \
+                            'B08' not in band_data_.keys():
                         warning_message(
                             'NDVI cannot be computed without both '
                             'Band04 and Band08'
