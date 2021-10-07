@@ -380,6 +380,10 @@ def sanity_check_ndvi_statistics(
 
     # Sanity Check with visual histogram
     ax2.hist(image.ravel()[(image.ravel() != 0)], bins=bins)
+    for tick in ax2.xaxis.get_major_ticks():
+        tick.label.set_fontsize(20)
+    for tick in ax2.yaxis.get_major_ticks():
+        tick.label.set_fontsize(20)
 
     plt.subplots_adjust(
         left=0,
