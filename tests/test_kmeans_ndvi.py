@@ -100,7 +100,7 @@ def test_load_data_into_struct():
     instance.load_data_into_struct()
 
     expected_data_struct = joblib.load(
-        'empty_jp2_data_structure_for_test.joblib.save'
+        'tests/empty_jp2_data_structure_for_test.joblib.save'
     )
 
     for scene_id_, res_data_ in instance.scenes.items():
