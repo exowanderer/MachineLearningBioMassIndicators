@@ -253,7 +253,7 @@ class SentinelAOI(object):
                         continue
                     for bnd_name_, raster_data_ in band_data_.items():
                         # Default behaviour:
-                        #   save input instance raster_data_ to current instance
+                        #   save input raster_data_ to current instance
                         self.scenes[scene_id_][res_][date_][bnd_name_] = \
                             raster_data_
 
@@ -439,7 +439,7 @@ class KMeansNDVI(SentinelAOI):
                         # Append this NDVI to timeseries_ list
                         timeseries_.append(dict_['ndvi'])
 
-                # Redefine the list of arrays to an array of arrays (image cube)
+                # Redefine the list of arrays to array of arrays (image cube)
                 timeseries_ = np.array(timeseries_)
 
                 # store in 'timeseries' dict inside self.scenes data structure
@@ -489,7 +489,7 @@ class KMeansNDVI(SentinelAOI):
                     )
 
                     # Store the result in the self.scenes data structure
-                    # This behaviour is used to maintaint 79 characters per line
+                    # This behaviour is used to maintain 79 characters per line
                     kdict_ = self.scenes[scene_id_][res_][date_]
                     if 'kmeans' not in kdict_.keys():
                         kdict_['kmeans'] = {}
