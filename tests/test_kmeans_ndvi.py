@@ -4,7 +4,7 @@ from context import SentinelAOI, SentinelAOIParams, KMeansNDVI
 
 
 def test_SentinelAOI():
-    pass
+    instance = SentinelAOI(**SentinelAOIParams().__dict__)
 
 
 def test_SentinelAOIParams():
