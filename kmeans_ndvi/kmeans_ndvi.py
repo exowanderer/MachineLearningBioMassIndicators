@@ -1,8 +1,11 @@
+"""Class definitions for kmeans_ndvi module"""
 import boto3
-import geopandas as gpd
-import numpy as np
+import joblib
 import os
 import rasterio
+
+import geopandas as gpd
+import numpy as np
 
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -11,7 +14,6 @@ from typing import List
 
 from satsearch import Search
 
-# TODO: change from utils to .utils when modularizing
 from .utils import (
     geom_to_bounding_box,
     get_prefix_filepath,
@@ -28,8 +30,21 @@ from .utils import (
 @dataclass
 class SentinelAOIParams:
     """Class for KMeansNDVI Input Params"""
-    geojson: str = 'doberitz_multipolygon.geojson'
-    scene_id: str = None
+    geojson: str = 'doeberitzer_multipolygon.geojson'
+    band_names: List[str] = field(default_factory=lambda: ['B04', 'B08'])
+    collection: str = 'sentinel-s2-l2a'
+    start_date: str = '2020-01-01'
+    end_date: str = '2020-02-01'
+    cloud_cover: float = 1
+    download: bool = True
+    verbose: bool = False
+    quiet: bool = True
+
+
+@dataclass
+class KMeansNDVIParams:
+    """Class for KMeansNDVI Input Params"""
+    geojson: str = 'doeberitzer_multipolygon.geojson'
     band_names: List[str] = field(default_factory=lambda: ['B04', 'B08'])
     collection: str = 'sentinel-s2-l2a'
     start_date: str = '2020-01-01'
@@ -37,7 +52,6 @@ class SentinelAOIParams:
     cloud_cover: float = 1
     n_sig: int = 10
     download: bool = True
-    env_filename: str = '.env'
     n_clusters: int = 5
     quantile_range: List[int] = field(default_factory=lambda: [1, 99])
     verbose: bool = False
@@ -45,7 +59,7 @@ class SentinelAOIParams:
     quiet: bool = True
 
 
-class SentinelAOI(object):
+class SentinelAOI:
 
     def __init__(
             self, geojson: str,
@@ -111,7 +125,7 @@ class SentinelAOI(object):
         # Build a GeoJSON bounding box around AOI(s)
         bounding_box = geom_to_bounding_box(self.gdf)
 
-        # Use Sat-Search to idenitify and load all meta data within search field
+        # Use Sat-Search to idenitify and load all meta data from search field
         self.search = Search(
             url=self.url_earth_search,
             intersects=bounding_box['features'][0]['geometry'],
@@ -155,10 +169,12 @@ class SentinelAOI(object):
             for feat_ in feat_iter:
                 # Loop over GeoJSON Bands
                 band_iter = tqdm(self.band_names, disable=self.quiet)
-                for band_name_ in band_iter:
+                for bnd_name_ in band_iter:
+                    if bnd_name_.upper() not in feat_['assets'].keys():
+                        continue
                     # Download the selected bands
                     _ = download_tile_band(  # filepath_
-                        feat_['assets'][band_name_.upper()]['href'],
+                        feat_['assets'][bnd_name_.upper()]['href'],
                         s3_client=self.s3_client
                     )
 
@@ -166,24 +182,27 @@ class SentinelAOI(object):
         self.filepaths = {}
         for feat_ in self.items_geojson['features']:
             # Loop over GeoJSON Bands
-            for band_name_ in self.band_names:
-                if not band_name_ in self.filepaths.keys():
+            for bnd_name_ in self.band_names:
+                if bnd_name_ not in self.filepaths.keys():
                     # Check if this is the first file per band
-                    self.filepaths[band_name_] = []
+                    self.filepaths[bnd_name_] = []
+
+                if bnd_name_.upper() not in feat_['assets'].keys():
+                    continue
 
                 # Download the selected bands
-                href = feat_['assets'][band_name_.upper()]['href']
+                href = feat_['assets'][bnd_name_.upper()]['href']
                 _, output_filepath = get_prefix_filepath(
                     href, collection=self.collection
                 )
                 # Storoe the file name in a per band structure
-                self.filepaths[band_name_].append(output_filepath)
+                self.filepaths[bnd_name_].append(output_filepath)
 
     def load_data_into_struct(self):
         """Load all files in filepaths inot data structure self.scenes
         """
 
-        for band_name_, filepaths_ in self.filepaths.items():
+        for bnd_name_, filepaths_ in self.filepaths.items():
             # loop over band names
             for fpath_ in filepaths_:
                 # loop over file paths
@@ -215,9 +234,9 @@ class SentinelAOI(object):
                 if date_ not in self.scenes[scene_id_][res_].keys():
                     # Set dates dict are blank dict per date
                     self.scenes[scene_id_][res_][date_] = {}
-                if band_name_ not in self.scenes[scene_id_][res_][date_].keys():
+                if bnd_name_ not in self.scenes[scene_id_][res_][date_].keys():
                     # Set band dict are blank dict per band
-                    self.scenes[scene_id_][res_][date_][band_name_] = {}
+                    self.scenes[scene_id_][res_][date_][bnd_name_] = {}
 
                 if self.verbose:
                     info_message(f"{fpath_} :: {os.path.exists(fpath_)}")
@@ -227,7 +246,22 @@ class SentinelAOI(object):
                 raster_['raster'] = rasterio.open(fpath_, driver='JP2OpenJPEG')
 
                 # Store the raster in the self.scenes data structure
-                self.scenes[scene_id_][res_][date_][band_name_] = raster_
+                self.scenes[scene_id_][res_][date_][bnd_name_] = raster_
+
+    def save_results(self, save_filename):
+        info_message(f'Saving Results to JobLib file: {save_filename}')
+        save_dict_ = {}
+        for key, val in self.__dict__.items():
+            if not hasattr(val, '__call__'):
+                save_dict_[key] = val
+
+        joblib.dump(save_dict_, save_filename)
+
+    def load_results(self, load_filename):
+        load_dict_ = joblib.load(load_filename)
+        for key, val in load_dict_.items():
+            if not hasattr(val, '__call__'):
+                self.__dict__[key] = val
 
     def __add__(self, instance):
         """Concatenate to this SentinelAOI instance the data from a second
@@ -251,10 +285,10 @@ class SentinelAOI(object):
                         # Corner case: if band_data_ is not a dict
                         self.scenes[scene_id_][res_][date_] = band_data_
                         continue
-                    for band_name_, raster_data_ in band_data_.items():
+                    for bnd_name_, raster_data_ in band_data_.items():
                         # Default behaviour:
-                        #   save input instance raster_data_ to current instance
-                        self.scenes[scene_id_][res_][date_][band_name_] = \
+                        #   save input raster_data_ to current instance
+                        self.scenes[scene_id_][res_][date_][bnd_name_] = \
                             raster_data_
 
     def __sub__(self, instance):
@@ -279,10 +313,10 @@ class SentinelAOI(object):
                         # Corner case: if band_data_ is not a dict
                         del self.scenes[scene_id_][res_][date_]
                         continue
-                    for band_name_, _ in band_data_.items():
+                    for bnd_name_, _ in band_data_.items():
                         # Default behaviour:
                         #   remove current data if it exists in input instance
-                        del self.scenes[scene_id_][res_][date_][band_name_]
+                        del self.scenes[scene_id_][res_][date_][bnd_name_]
 
     def __repr__(self):
         return "\n".join([
@@ -300,8 +334,7 @@ class SentinelAOI(object):
 
 
 class KMeansNDVI(SentinelAOI):
-    """Class to contain STAC Sentinel-2 Data Structure
-    """
+    """Class to contain STAC Sentinel-2 Data Structure"""
 
     def __init__(
             self, geojson: str,
@@ -384,8 +417,8 @@ class KMeansNDVI(SentinelAOI):
             for res_, date_dict_ in res_iter:
                 date_iter = tqdm(date_dict_.items(), disable=self.quiet)
                 for date_, band_data_ in date_iter:
-                    if not 'B04' in band_data_.keys() and \
-                            not 'B08' in band_data_.keys():
+                    if 'B04' not in band_data_.keys() and \
+                            'B08' not in band_data_.keys():
                         warning_message(
                             'NDVI cannot be computed without '
                             'both Band04 and Band08'
@@ -439,7 +472,7 @@ class KMeansNDVI(SentinelAOI):
                         # Append this NDVI to timeseries_ list
                         timeseries_.append(dict_['ndvi'])
 
-                # Redefine the list of arrays to an array of arrays (image cube)
+                # Redefine the list of arrays to array of arrays (image cube)
                 timeseries_ = np.array(timeseries_)
 
                 # store in 'timeseries' dict inside self.scenes data structure
@@ -468,8 +501,8 @@ class KMeansNDVI(SentinelAOI):
             for res_, date_dict_ in res_iter:
                 date_iter = tqdm(date_dict_.items(), disable=self.quiet)
                 for date_, band_data_ in date_iter:
-                    if not 'B04' in band_data_.keys() and \
-                            not 'B08' in band_data_.keys():
+                    if 'B04' not in band_data_.keys() and \
+                            'B08' not in band_data_.keys():
                         warning_message(
                             'NDVI cannot be computed without both '
                             'Band04 and Band08'
@@ -489,7 +522,7 @@ class KMeansNDVI(SentinelAOI):
                     )
 
                     # Store the result in the self.scenes data structure
-                    # This behaviour is used to maintaint 79 characters per line
+                    # This behaviour is used to maintain 79 characters per line
                     kdict_ = self.scenes[scene_id_][res_][date_]
                     if 'kmeans' not in kdict_.keys():
                         kdict_['kmeans'] = {}

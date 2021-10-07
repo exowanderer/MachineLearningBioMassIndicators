@@ -1,3 +1,4 @@
+"""Tutorial runthrough for full SatSearch operations"""
 import os
 from satsearch import Search
 
