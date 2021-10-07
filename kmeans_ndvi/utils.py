@@ -436,7 +436,7 @@ def sanity_check_spatial_kmeans(kmeans, image, quantile_range=(1, 99),
         left=0,
         right=1,
         bottom=0,
-        top=1,
+        top=0.9,
         wspace=1e-2
     )
 
@@ -509,7 +509,7 @@ def sanity_check_temporal_kmeans(
         left=0,
         right=1,
         bottom=0,
-        top=1,
+        top=0.9,
         wspace=1e-2
     )
 
