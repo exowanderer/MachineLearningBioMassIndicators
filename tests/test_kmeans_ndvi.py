@@ -4,7 +4,9 @@ from context import SentinelAOI, SentinelAOIParams, KMeansNDVI
 
 
 def test_SentinelAOI():
-    instance = SentinelAOI(**SentinelAOIParams().__dict__)
+    sentinel_params = SentinelAOIParams()
+    sentinel_params.geojson = f"../{sentinel_params.geojson}"
+    instance = SentinelAOI(**sentinel_params.__dict__)
 
 
 def test_SentinelAOIParams():
