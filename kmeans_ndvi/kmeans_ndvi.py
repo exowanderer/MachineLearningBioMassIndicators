@@ -1,3 +1,4 @@
+"""Class definitions for kmeans_ndvi module"""
 import boto3
 import geopandas as gpd
 import numpy as np
@@ -45,7 +46,7 @@ class SentinelAOIParams:
     quiet: bool = True
 
 
-class SentinelAOI(object):
+class SentinelAOI:
 
     def __init__(
             self, geojson: str,

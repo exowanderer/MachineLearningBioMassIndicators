@@ -1,6 +1,7 @@
+"""Functional forms for utilities for kmeans_ndvi module"""
+import os
 import json
 import numpy as np
-import os
 
 from matplotlib import pyplot as plt
 from sklearn.cluster import KMeans, MiniBatchKMeans

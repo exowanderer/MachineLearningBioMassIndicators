@@ -1,3 +1,4 @@
+"""List of tests for PyTests"""
 import pytest
 from context import SentinelAOI, SentinelAOIParams, KMeansNDVI
 
