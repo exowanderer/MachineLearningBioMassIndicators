@@ -99,24 +99,21 @@ def test_load_data_into_struct():
     instance.download_and_acquire_images()
     instance.load_data_into_struct()
 
-    expected_filepaths = joblib.load(
+    expected_data_struct = joblib.load(
         'empty_jp2_data_structure_for_test.joblib.save'
     )
 
-    for scene_id_, res_data_ in expected_filepaths.items():
-        assert(scene_id_ in instance.scenes.keys()), \
-            "expected file structure does not match instance.scenes"
-        if not isinstance(res_data_, dict):
-            continue
+    for scene_id_, res_data_ in instance.scenes.items():
+        assert(scene_id_ in expected_data_struct.keys())
         for res_, date_data_ in res_data_.items():
-            if not isinstance(date_data_, dict):
-                continue
+            val = expected_data_struct[scene_id_]
+            assert(res_ in val.keys())
             for date_, band_data_ in date_data_.items():
-                if not isinstance(band_data_, dict):
-                    continue
+                val = expected_data_struct[scene_id_][res_]
+                assert(date_ in val.keys())
                 for band_name_, raster_data_ in band_data_.items():
-                    if not isinstance(raster_data_, dict):
-                        continue
+                    val = expected_data_struct[scene_id_][res_][date_]
+                    assert(band_name_ in val.keys())
 
 
 def test_compute_ndvi_for_all():
