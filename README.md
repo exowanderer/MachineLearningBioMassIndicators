@@ -253,8 +253,6 @@ sanity_check_ndvi_statistics(image, scene_id, res, date, bins=100, plot_now=True
 
 ![png](imgs/output_31_0.png)
 
-![png](imgs/output_31_1.png)
-
 **Examine the Clustering and Cluster Dependence for a Single NDVI**  
 Reconstructs a single NDVI from the predicted spatial K-Means cluster centers to reveal the regional similarities.
 The visually connected behaviour of the K-Means cluster (spatial) labels coincides with our assumption that pixels of similar NDVI greyscale will be co-located, because they are likely to be similar in material (soil, streets, trees, water, etc).
