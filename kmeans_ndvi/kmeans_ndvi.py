@@ -155,10 +155,10 @@ class SentinelAOI(object):
             for feat_ in feat_iter:
                 # Loop over GeoJSON Bands
                 band_iter = tqdm(self.band_names, disable=self.quiet)
-                for band_name_ in band_iter:
+                for bnd_name_ in band_iter:
                     # Download the selected bands
                     _ = download_tile_band(  # filepath_
-                        feat_['assets'][band_name_.upper()]['href'],
+                        feat_['assets'][bnd_name_.upper()]['href'],
                         s3_client=self.s3_client
                     )
 
@@ -166,24 +166,24 @@ class SentinelAOI(object):
         self.filepaths = {}
         for feat_ in self.items_geojson['features']:
             # Loop over GeoJSON Bands
-            for band_name_ in self.band_names:
-                if band_name_ not in self.filepaths.keys():
+            for bnd_name_ in self.band_names:
+                if bnd_name_ not in self.filepaths.keys():
                     # Check if this is the first file per band
-                    self.filepaths[band_name_] = []
+                    self.filepaths[bnd_name_] = []
 
                 # Download the selected bands
-                href = feat_['assets'][band_name_.upper()]['href']
+                href = feat_['assets'][bnd_name_.upper()]['href']
                 _, output_filepath = get_prefix_filepath(
                     href, collection=self.collection
                 )
                 # Storoe the file name in a per band structure
-                self.filepaths[band_name_].append(output_filepath)
+                self.filepaths[bnd_name_].append(output_filepath)
 
     def load_data_into_struct(self):
         """Load all files in filepaths inot data structure self.scenes
         """
 
-        for band_name_, filepaths_ in self.filepaths.items():
+        for bnd_name_, filepaths_ in self.filepaths.items():
             # loop over band names
             for fpath_ in filepaths_:
                 # loop over file paths
@@ -215,9 +215,9 @@ class SentinelAOI(object):
                 if date_ not in self.scenes[scene_id_][res_].keys():
                     # Set dates dict are blank dict per date
                     self.scenes[scene_id_][res_][date_] = {}
-                if band_name_ not in self.scenes[scene_id_][res_][date_].keys():
+                if bnd_name_ not in self.scenes[scene_id_][res_][date_].keys():
                     # Set band dict are blank dict per band
-                    self.scenes[scene_id_][res_][date_][band_name_] = {}
+                    self.scenes[scene_id_][res_][date_][bnd_name_] = {}
 
                 if self.verbose:
                     info_message(f"{fpath_} :: {os.path.exists(fpath_)}")
@@ -227,7 +227,7 @@ class SentinelAOI(object):
                 raster_['raster'] = rasterio.open(fpath_, driver='JP2OpenJPEG')
 
                 # Store the raster in the self.scenes data structure
-                self.scenes[scene_id_][res_][date_][band_name_] = raster_
+                self.scenes[scene_id_][res_][date_][bnd_name_] = raster_
 
     def __add__(self, instance):
         """Concatenate to this SentinelAOI instance the data from a second
@@ -251,10 +251,10 @@ class SentinelAOI(object):
                         # Corner case: if band_data_ is not a dict
                         self.scenes[scene_id_][res_][date_] = band_data_
                         continue
-                    for band_name_, raster_data_ in band_data_.items():
+                    for bnd_name_, raster_data_ in band_data_.items():
                         # Default behaviour:
                         #   save input instance raster_data_ to current instance
-                        self.scenes[scene_id_][res_][date_][band_name_] = \
+                        self.scenes[scene_id_][res_][date_][bnd_name_] = \
                             raster_data_
 
     def __sub__(self, instance):
@@ -279,10 +279,10 @@ class SentinelAOI(object):
                         # Corner case: if band_data_ is not a dict
                         del self.scenes[scene_id_][res_][date_]
                         continue
-                    for band_name_, _ in band_data_.items():
+                    for bnd_name_, _ in band_data_.items():
                         # Default behaviour:
                         #   remove current data if it exists in input instance
-                        del self.scenes[scene_id_][res_][date_][band_name_]
+                        del self.scenes[scene_id_][res_][date_][bnd_name_]
 
     def __repr__(self):
         return "\n".join([
