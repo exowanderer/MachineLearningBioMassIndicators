@@ -80,9 +80,7 @@ python -m pytest
 jupyter lab
 ```
 
-# If using on EC2, follow the instructions here to access the notebook
-
-# https://medium.com/@alexjsanchez/python-3-notebooks-on-aws-ec2-in-15-mostly-easy-steps-2ec5e662c6c6
+# If using on EC2, follow the instructions [here](https://medium.com/@alexjsanchez/python-3-notebooks-on-aws-ec2-in-15-mostly-easy-steps-2ec5e662c6c6) to access the notebook
 ```bash
 jupyter lab --no-browser
 ```
