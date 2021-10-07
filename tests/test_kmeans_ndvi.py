@@ -1,6 +1,8 @@
 """List of tests for PyTests"""
 import os
+import joblib
 import pytest
+
 from context import (
     SentinelAOI,
     SentinelAOIParams,
@@ -11,6 +13,8 @@ from context import (
 
 
 def test_SentinelAOI():
+    """Test that the input system works correctly for SentinelAOI"""
+
     param_keys = [
         'geojson', 'band_names', 'collection', 'start_date',
         'end_date', 'cloud_cover', 'download', 'verbose', 'quiet'
@@ -25,6 +29,7 @@ def test_SentinelAOI():
 
 
 def test_KMeansNDVI():
+    """Test that the input system works correctly for KMeansNDVI"""
     param_keys = [
         'geojson', 'band_names', 'collection', 'start_date',
         'end_date', 'cloud_cover', 'n_sig', 'download', 'n_clusters',
@@ -40,6 +45,7 @@ def test_KMeansNDVI():
 
 
 def test_download_and_acquire_images():
+    """Test Earth on AWS Database and KMeansNDVI filepaths match"""
     expected_filepaths = {
         'B04': [
             'sentinel-s2-l2a/33UUU/R10m/2020-1-24/B04.jp2',
@@ -79,6 +85,7 @@ def test_download_and_acquire_images():
 
 
 def test_load_data_into_struct():
+    """Test KMeansNDVI data structure matches expectations"""
     kmean_ndvi_params = KMeansNDVIParams()
     kmean_ndvi_params.band_names = ['B04', 'B08']
     kmean_ndvi_params.start_date = '2020-01-01'
@@ -91,6 +98,25 @@ def test_load_data_into_struct():
     instance = KMeansNDVI(**kmean_ndvi_params.__dict__)
     instance.download_and_acquire_images()
     instance.load_data_into_struct()
+
+    expected_filepaths = joblib.load(
+        'empty_jp2_data_structure_for_test.joblib.save'
+    )
+
+    for scene_id_, res_data_ in expected_filepaths.items():
+        assert(scene_id_ in instance.scenes.keys()), \
+            "expected file structure does not match instance.scenes"
+        if not isinstance(res_data_, dict):
+            continue
+        for res_, date_data_ in res_data_.items():
+            if not isinstance(date_data_, dict):
+                continue
+            for date_, band_data_ in date_data_.items():
+                if not isinstance(band_data_, dict):
+                    continue
+                for band_name_, raster_data_ in band_data_.items():
+                    if not isinstance(raster_data_, dict):
+                        continue
 
 
 def test_compute_ndvi_for_all():
