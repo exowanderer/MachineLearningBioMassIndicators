@@ -44,7 +44,6 @@ class SentinelAOIParams:
 class KMeansNDVIParams:
     """Class for KMeansNDVI Input Params"""
     geojson: str = 'doeberitzer_multipolygon.geojson'
-    scene_id: str = None
     band_names: List[str] = field(default_factory=lambda: ['B04', 'B08'])
     collection: str = 'sentinel-s2-l2a'
     start_date: str = '2020-01-01'
@@ -52,7 +51,6 @@ class KMeansNDVIParams:
     cloud_cover: float = 1
     n_sig: int = 10
     download: bool = True
-    env_filename: str = '.env'
     n_clusters: int = 5
     quantile_range: List[int] = field(default_factory=lambda: [1, 99])
     verbose: bool = False

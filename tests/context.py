@@ -3,7 +3,12 @@ import os
 import sys
 
 # pylint: disable=unused-import
-from kmeans_ndvi import SentinelAOI, SentinelAOIParams, KMeansNDVI
+from kmeans_ndvi import (
+    SentinelAOI,
+    SentinelAOIParams,
+    KMeansNDVI,
+    KMeansNDVIParams
+)
 
 # Path hacks to make the code available for testing
 sys.path.insert(
