@@ -58,7 +58,8 @@ conda env create --file kmeans_ndvi_environment.yml
 conda activate kmeans_ndvi
 ```
 
-# Configure AWS with AWS_ACCESS_KEY_ID and AWS_SECRET_KEY
+# Configure AWS with AWS_ACCESS_KEY_ID and AWS_SECRET_KEY  
+Only necessary is the user wants to request the JP2 files
 ```bash
 aws configure
 ```
