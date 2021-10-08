@@ -176,7 +176,8 @@ class SentinelAOI:
                     # Download the selected bands
                     _ = download_tile_band(  # filepath_
                         feat_['assets'][bnd_name_.upper()]['href'],
-                        s3_client=self.s3_client
+                        s3_client=self.s3_client,
+                        collection=self.collection
                     )
 
         # Loop over GeoJSON Features to Allocate all requested files
