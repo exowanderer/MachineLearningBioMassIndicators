@@ -39,7 +39,7 @@ if __name__ == "__main__":
     )
     args.add_argument("--scene_id", type=str)
     args.add_argument("--band_names", nargs="+", default=["B04", "B08"])
-    args.add_argument("--collection", type=str, default="sentinel-s2-l2a")
+    args.add_argument("--collection", type=str, default="sentinel-s2-l2a-cogs")
     args.add_argument("--start_date", type=str, default="2020-01-01")
     args.add_argument("--end_date", type=str, default="2020-02-01")
     args.add_argument("--cloud_cover", type=int, default=1)

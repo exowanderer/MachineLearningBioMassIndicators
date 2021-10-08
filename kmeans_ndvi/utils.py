@@ -12,8 +12,12 @@ from statsmodels.robust import scale
 # from rasterio import plot
 # from rasterio.merge import merge
 from rasterio.mask import mask
+
 # from shapely.geometry import box
 from icecream import ic
+
+# import the wget module
+from wget import download
 
 
 ic.configureOutput(includeContext=True)
@@ -102,28 +106,42 @@ def geom_to_bounding_box(gdf):
     }
 
 
-def get_prefix_filepath(href, collection='sentinel-s2-l2a'):
+def get_prefix_filepath(href, collection='sentinel-s2-l2a-cogs'):
     """Generate prefix and filepath for boto3 s3 download request.
 
     Args:
         href (str): s3 url for single scene from satsearch service
         collection (str, optional): AWS bucket from which to grab jp2 files.
-            Defaults to 'sentinel-s2-l2a'.
+            Defaults to 'sentinel-s2-l2a-cogs'.
 
     Returns:
         tuple (str, str): `prefix` and `output_filepath` for boto3
     """
 
     # Isolate the boto3 S3 bucket prefix from the href url
-    prefix = href.replace(f's3://{collection}/', '')
+    if 'cogs' in href:
+        prefix = href.split(collection + '/')[1]
+        prefix = f'tiles/{prefix}'
+
+        date_ = prefix.split('/')[6].split('_')[2]
+        year_ = date_[:4]
+        month_ = date_[4:6]
+        day_ = date_[6:]
+
+        # Isolate the output file path from the prefix
+        dir_resolution = 'R10m'
+        dir_sector = ''.join(prefix.split('/')[1:4])
+        dir_date = f'{year_}-{month_}-{day_}'
+    else:
+        prefix = href.replace(f's3://{collection}/', '')
+
+        # Isolate the output file path from the prefix
+        dir_resolution = prefix.split('/')[8]
+        dir_sector = ''.join(prefix.split('/')[1:4])
+        dir_date = '-'.join(prefix.split('/')[4:7])
 
     # Isolate the jp2 filename from the prefix
     filename = prefix[prefix.rfind('/') + 1:]
-
-    # Isolate the output file path from the prefix
-    dir_resolution = prefix.split('/')[8]
-    dir_sector = ''.join(prefix.split('/')[1:4])
-    dir_date = '-'.join(prefix.split('/')[4:7])
 
     # Build the output file directory
     output_filedir = os.path.join(
@@ -143,13 +161,13 @@ def get_prefix_filepath(href, collection='sentinel-s2-l2a'):
     return prefix, output_filepath
 
 
-def download_tile_band(href, collection='sentinel-s2-l2a', s3_client=None):
+def download_tile_band(href, collection='sentinel-s2-l2a-cogs', s3_client=None):
     """Download a specific S3 file URL
 
     Args:
         href (str): S3 file URL
         collection (str, optional): Earth-AWS collection.
-            Defaults to 'sentinel-s2-l2a'.
+            Defaults to 'sentinel-s2-l2a-cogs'.
     """
     assert(s3_client is not None), 'assign s3_client in SentinelAOI instance'
 
@@ -161,13 +179,16 @@ def download_tile_band(href, collection='sentinel-s2-l2a', s3_client=None):
 
     # Check if file already exists to skip double downloading
     if not os.path.exists(output_filepath):
-        # Download it to current directory
-        s3_client.download_file(
-            collection,
-            prefix,
-            output_filepath,
-            {'RequestPayer': 'requester'}
-        )
+        if 'cogs' in collection:
+            download(url=href, out=output_filepath)
+        else:
+            # Download it to current directory
+            s3_client.download_file(
+                collection,
+                prefix,
+                output_filepath,
+                {'RequestPayer': 'requester'}
+            )
 
     return output_filepath
 

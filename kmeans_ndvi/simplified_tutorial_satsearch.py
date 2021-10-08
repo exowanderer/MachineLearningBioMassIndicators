@@ -15,7 +15,7 @@ search = Search(
     datetime=eo_datetime,
     bbox=eo_bbox,
     query=eo_query,
-    collections=['sentinel-s2-l2a']
+    collections=['sentinel-s2-l2a-cogs']
 )
 print(f'combined search: {search.found()} items')
 
