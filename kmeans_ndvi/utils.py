@@ -179,7 +179,6 @@ def download_tile_band(href, collection='sentinel-s2-l2a-cogs', s3_client=None):
 
     # Check if file already exists to skip double downloading
     if not os.path.exists(output_filepath):
-        debug_message(f"collection:{collection}")
         if 'cogs' in collection:
             download(url=href, out=output_filepath)
         else:
