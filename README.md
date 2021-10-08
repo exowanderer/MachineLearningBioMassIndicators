@@ -267,7 +267,7 @@ image = jp2_data.scenes[scene_id][res][date]['ndvi']
 sanity_check_ndvi_statistics(image, scene_id, res, date, bins=100, plot_now=True)
 ```
 
-![png](output_32_0.png)
+![png](imgs/output_32_0.png)
 
 **Examine the Clustering and Cluster Dependence for a Single NDVI**  
 Reconstructs a single NDVI from the predicted spatial K-Means cluster centers to reveal the regional similarities.
@@ -292,7 +292,7 @@ sanity_check_spatial_kmeans(
 )
 ```
 
-![png](output_34_0.png)
+![png](imgs/output_34_0.png)
 
 **Examine the Clustering and Cluster Dependence for a Temporal Image Cube**  
 Reconstructs a single image from the predicted temporal K-Means cluster centers over the pixel-by-pixel analysis from our NDVI image cube to reveal the regional similarities in their temporal change behaviour.
@@ -323,4 +323,4 @@ sanity_check_temporal_kmeans(
 )
 ```
 
-![png](output_36_0.png)
+![png](imgs/output_36_0.png)
