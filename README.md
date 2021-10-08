@@ -120,6 +120,9 @@ jp2_data = KMeansNDVI(
 )
 ```
 
+    INFO | utils.py:28 in info_message()
+           message: 'Generate JP2 KMeansNDVI Instance'
+
 **Confirm that the `jp2_data` instance is sound**  
 Print the `__repr__` for the `jp2_data` instance to confirm that all settings are valid
 
@@ -127,13 +130,13 @@ Print the `__repr__` for the `jp2_data` instance to confirm that all settings ar
 info_message(jp2_data)
 ```
 
-    INFO | utils.py:24 in info_message()
+    INFO | utils.py:28 in info_message()
            message: SentinelAOI:
                                 AOI: doeberitzer_multipolygon.geojson
                          Start Date: 2020-01-01
                            End Date: 2020-02-01
                     Cloud Cover Max: 1
-                         Collection: sentinel-s2-l2a
+                         Collection: sentinel-s2-l2a-cogs
                          Band Names: ['B04', 'B08']
 
 **Download and Acquire Images**  
@@ -147,6 +150,19 @@ info_message("Downloading and acquiring images")
 jp2_data.download_and_acquire_images()
 ```
 
+    INFO | utils.py:28 in info_message()
+           message: 'Downloading and acquiring images'
+
+
+    https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/33/U/UU/2020/1/S2B_33UUU_20200124_0_L2A/B04.tif
+    https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/33/U/UU/2020/1/S2B_33UUU_20200124_0_L2A/B08.tif
+    https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/32/U/QD/2020/1/S2B_32UQD_20200124_0_L2A/B04.tif
+    https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/32/U/QD/2020/1/S2B_32UQD_20200124_0_L2A/B08.tif
+    https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/32/U/QD/2020/1/S2B_32UQD_20200117_0_L2A/B04.tif
+    https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/32/U/QD/2020/1/S2B_32UQD_20200117_0_L2A/B08.tif
+    https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/33/U/UU/2020/1/S2B_33UUU_20200117_0_L2A/B04.tif
+    https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/33/U/UU/2020/1/S2B_33UUU_20200117_0_L2A/B08.tif
+
 **Load the JP2 files into memory**  
 Here we loop over each `jp2_data.filepaths` entry and load the subsequent JP2 rasters, using rasterio, into the `jp2_data.scenes`  
 data structure
@@ -155,6 +171,9 @@ data structure
 info_message("Loading JP2 files into data structure")
 jp2_data.load_data_into_struct()
 ```
+
+    INFO | utils.py:28 in info_message()
+           message: 'Loading JP2 files into data structure'
 
 **Loop and Compute the NDVI for all Scenes**  
 Once all of the rasters are loaded and organized, we can (here) compute the NDVI for all scenes that include both a Band4 and Band8 rasters. Because it is possible that one of the these rasters is corrupted (locally or on the AWS database), we first confirm that both rasters were loaded correctly.
@@ -166,6 +185,13 @@ info_message("Computing NDVI for all scenes")
 jp2_data.compute_ndvi_for_all()
 ```
 
+    INFO | utils.py:28 in info_message()
+           message: 'Computing NDVI for all scenes'
+    /home/jonathan/anaconda3/envs/kmeans_ndvi/lib/python3.8/site-packages/pyproj/crs/crs.py:131: FutureWarning: '+init=<authority>:<code>' syntax is deprecated. '<authority>:<code>' is the preferred initialization method. When making the change, be mindful of axis order changes: https://pyproj4.github.io/pyproj/stable/gotchas.html#axis-order-changes-in-proj-6
+      in_crs_string = _prepare_from_proj_string(in_crs_string)
+    /mnt/d/Research/kmeans_ndvi/DataScienceChallenge/git_clone_test/kmeans_doeberitzer_heide_sentinel/kmeans_ndvi/utils.py:257: RuntimeWarning: invalid value encountered in true_divide
+      ndvi_masked = np.true_divide(
+
 **Create the NDVI Temporal Image Cube**  
 To later compute the K-Means Clusters per temporal pixel (over time), we must first stack the images into a data cube. This doubles the memory usages, and this therefore not a byproduct of computing the NDVI images first. This temporal image cube can be used for several temporally related machine learning or data analysis pipelines to be developed.
 
@@ -173,6 +199,9 @@ To later compute the K-Means Clusters per temporal pixel (over time), we must fi
 info_message("Allocating NDVI time series")
 jp2_data.allocate_ndvi_timeseries()
 ```
+
+    INFO | utils.py:28 in info_message()
+           message: 'Allocating NDVI time series'
 
 **K-Means Clustering over Each NDVI Image**  
 Loop over the set of NDVI images in the `jp2_data.scenes` data structure and compute the K-Means Clustering Centers with respect to the greyscale levels. We chose as a default `n_clusters=5`, which correspond to black, dark grey, grey, light grey, and white.
@@ -187,6 +216,13 @@ info_message("Computing spatial K-Means for each scene NDVI")
 jp2_data.compute_spatial_kmeans()
 ```
 
+    INFO | utils.py:28 in info_message()
+           message: 'Computing spatial K-Means for each scene NDVI'
+    WARNING | utils.py:33 in warning_message()
+              message: 'NDVI cannot be computed without both Band04 and Band08'
+    WARNING | utils.py:33 in warning_message()
+              message: 'NDVI cannot be computed without both Band04 and Band08'
+
 **K-Means Clustering over the NDVI Time Series per Scene**  
 Loop over the set of NDVI image cubes, per scene, in the `jp2_data.scenes` data structure and compute the K-Means Clustering Centers with respect to changes over time. Because vegetation seeds, germinates, develops, whithers, and fades over time (seasonally with respect to weather patterns and climate), our assumption is that a temporal analysis will reveal similarities in pixels that include similar plants (trees, grass, etc); and dissimilarities between biomass rich pixels and urban development pixels (roads, buildings, etc).
 
@@ -199,6 +235,9 @@ Because the results are often spatially connected in the reconstructed images (s
 info_message("Computing temporal K-Means for each scene NDVIs over time")
 jp2_data.compute_temporal_kmeans()
 ```
+
+    INFO | utils.py:28 in info_message()
+           message: 'Computing temporal K-Means for each scene NDVIs over time'
 
 # Examine the Results
 
@@ -228,7 +267,7 @@ image = jp2_data.scenes[scene_id][res][date]['ndvi']
 sanity_check_ndvi_statistics(image, scene_id, res, date, bins=100, plot_now=True)
 ```
 
-![png](imgs/output_32_0.png)
+![png](output_32_0.png)
 
 **Examine the Clustering and Cluster Dependence for a Single NDVI**  
 Reconstructs a single NDVI from the predicted spatial K-Means cluster centers to reveal the regional similarities.
@@ -253,7 +292,7 @@ sanity_check_spatial_kmeans(
 )
 ```
 
-![png](imgs/output_34_0.png)
+![png](output_34_0.png)
 
 **Examine the Clustering and Cluster Dependence for a Temporal Image Cube**  
 Reconstructs a single image from the predicted temporal K-Means cluster centers over the pixel-by-pixel analysis from our NDVI image cube to reveal the regional similarities in their temporal change behaviour.
@@ -284,4 +323,4 @@ sanity_check_temporal_kmeans(
 )
 ```
 
-![png](imgs/output_36_0.png)
+![png](output_36_0.png)

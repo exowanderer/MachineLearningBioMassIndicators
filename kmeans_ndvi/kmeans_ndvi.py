@@ -32,7 +32,7 @@ class SentinelAOIParams:
     """Class for KMeansNDVI Input Params"""
     geojson: str = 'doeberitzer_multipolygon.geojson'
     band_names: List[str] = field(default_factory=lambda: ['B04', 'B08'])
-    collection: str = 'sentinel-s2-l2a'
+    collection: str = 'sentinel-s2-l2a-cogs'
     start_date: str = '2020-01-01'
     end_date: str = '2020-02-01'
     cloud_cover: float = 1
@@ -46,7 +46,7 @@ class KMeansNDVIParams:
     """Class for KMeansNDVI Input Params"""
     geojson: str = 'doeberitzer_multipolygon.geojson'
     band_names: List[str] = field(default_factory=lambda: ['B04', 'B08'])
-    collection: str = 'sentinel-s2-l2a'
+    collection: str = 'sentinel-s2-l2a-cogs'
     start_date: str = '2020-01-01'
     end_date: str = '2020-02-01'
     cloud_cover: float = 1
@@ -64,7 +64,7 @@ class SentinelAOI:
     def __init__(
             self, geojson: str,
             start_date: str = '2020-01-01', end_date: str = '2020-02-01',
-            cloud_cover: int = 1, collection: str = 'sentinel-s2-l2a',
+            cloud_cover: int = 1, collection: str = 'sentinel-s2-l2a-cogs',
             band_names: list = ['B04', 'B08'], download: bool = False,
             verbose: bool = False, quiet=False):
         """[summary]
@@ -78,7 +78,7 @@ class SentinelAOI:
             cloud_cover (int, optional): Percent cloud cover maximum.
                 Defaults to 1.
             collection (str, optional): S3 bucket collection for STAC_API_URL.
-                Defaults to 'sentinel-s2-l2a'.
+                Defaults to 'sentinel-s2-l2a-cogs'.
             band_names (list, optional): Sentinel-2 band names.
                 Defaults to ['B04', 'B08'].
             download (bool, optional): Flag whether to initate a download
@@ -172,6 +172,7 @@ class SentinelAOI:
                 for bnd_name_ in band_iter:
                     if bnd_name_.upper() not in feat_['assets'].keys():
                         continue
+                    print(feat_['assets'][bnd_name_.upper()]['href'])
                     # Download the selected bands
                     _ = download_tile_band(  # filepath_
                         feat_['assets'][bnd_name_.upper()]['href'],
@@ -243,7 +244,13 @@ class SentinelAOI:
 
                 # Load the JP2 file
                 raster_ = {}  # Aid to maintain 79 characters per line
-                raster_['raster'] = rasterio.open(fpath_, driver='JP2OpenJPEG')
+                if 'cog' in self.collection:
+                    raster_['raster'] = rasterio.open(fpath_)
+                else:
+                    raster_['raster'] = rasterio.open(
+                        fpath_,
+                        driver='JP2OpenJPEG'
+                    )
 
                 # Store the raster in the self.scenes data structure
                 self.scenes[scene_id_][res_][date_][bnd_name_] = raster_
@@ -341,7 +348,7 @@ class KMeansNDVI(SentinelAOI):
             start_date: str = '2020-01-01',
             end_date: str = '2020-02-01',
             cloud_cover: int = 1,
-            collection: str = 'sentinel-s2-l2a',
+            collection: str = 'sentinel-s2-l2a-cogs',
             band_names: list = ['B04', 'B08'],
             download: bool = False,
             n_clusters: int = 5,
@@ -363,7 +370,7 @@ class KMeansNDVI(SentinelAOI):
             cloud_cover (int, optional): Percent cloud cover maximum.
                 Defaults to 1. [Inherited]
             collection (str, optional): S3 bucket collection for STAC_API_URL.
-                Defaults to 'sentinel-s2-l2a'. [Inherited]
+                Defaults to 'sentinel-s2-l2a-cogs'. [Inherited]
             band_names (list, optional): Sentinel-2 band names.
                 Defaults to ['B04', 'B08']. [Inherited]
             download (bool, optional): Flag whether to initate a download
