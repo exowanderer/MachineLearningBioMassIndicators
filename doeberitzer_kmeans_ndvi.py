@@ -13,7 +13,7 @@ from kmeans_ndvi import (
 
 if __name__ == "__main__":
     EXAMPLE_USAGE = """
-    Use case:
+    Use case (bash):
 
     python doeberitzer_kmeans_ndvi.py \
         --band_names b04 b08\
@@ -24,11 +24,18 @@ if __name__ == "__main__":
         --verbose\
         --verbose_plot
 
-    OR
 
-    python doeberitzer_kmeans_ndvi.py --band_names b04 b08 --start_date
-    2020-01-01 --end_date 2020-02-01 --cloud_cover 1 --download --verbose
-    --verbose_plot
+    To access the (paid for) JP2 files instead. Use
+
+    python doeberitzer_kmeans_ndvi.py \
+        --band_names b04 b08\
+        --start_date 2020-01-01 \
+        --end_date 2020-02-01 \
+        --cloud_cover 1 \
+        --download\
+        --verbose\
+        --verbose_plot\
+        --collection sentinel-s2-l2a
     """
 
     args = ArgumentParser(prog="Doeberitzer K-Means NDVI")
