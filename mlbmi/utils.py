@@ -1,4 +1,4 @@
-"""Functional forms for utilities for kmeans_ndvi module"""
+"""Functional forms for utilities for mlbmi module"""
 import os
 import json
 import numpy as np

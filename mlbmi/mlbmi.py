@@ -1,4 +1,4 @@
-"""Class definitions for kmeans_ndvi module"""
+"""Class definitions for mlbmi module"""
 import boto3
 import joblib
 import os

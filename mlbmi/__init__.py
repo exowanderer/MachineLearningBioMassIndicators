@@ -1,5 +1,5 @@
-"""Init file for kmeans_ndvi module"""
-from .kmeans_ndvi import (
+"""Init file for mlbmi module"""
+from .mlbmi import (
     KMeansNDVI,
     SentinelAOI,
     SentinelAOIParams,

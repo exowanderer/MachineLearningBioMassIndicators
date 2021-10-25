@@ -46,9 +46,9 @@ For our example below, we detailed methods (2) and (3), above, by first measurin
 <u>**Erratum**</u>  
 **[Note]** The Sentinel-2 Earth AWS data are stored in a `request-pays` S3 bucket, which charges the user of Sat-Search; and thus this K-Means NDVI package. The user must have their `AWS_SECRET_ACCESS_KEY` and `AWS_ACCESS_KEY_ID` in their environment variables; as well as the `STAC_API_URL` set to `https://earth-search.aws.element84.com/v0`. Because we load the `.env` file during operations, these values can be stored and provided via a `.env` or other file using the `--env_filename` flag on the provided CLI (see below).
 
-**[Note]** We provided a yml file to create a cond environment (`kmeans_ndvi_environment.yml`), which will provide all the necessary tools and packages to operate this notebook, and our related CLI interface.
+**[Note]** We provided a yml file to create a cond environment (`mlbmi_environment.yml`), which will provide all the necessary tools and packages to operate this notebook, and our related CLI interface.
 
-`conda create --file kmeans_ndvi_environment.yml`
+`conda create --file mlbmi_environment.yml`
 
 Moreover, the download api that we built for this project uses `boto3`, which interfaces with the `awscli` Python package. The user must therefore ensure that they have both installed and configured these packages.
 
@@ -68,10 +68,10 @@ from dotenv import load_dotenv
 from matplotlib import pyplot as plt
 ```
 
-**Load local `kmeans_ndvi` package (developed here)**
+**Load local `mlbmi` package (developed here)**
 
 ```python
-from kmeans_ndvi import KMeansNDVI, KMeansNDVIParams, info_message
+from mlbmi import KMeansNDVI, KMeansNDVIParams, info_message
 ```
 
 **Configure the input parameters for the SentinelAOI instance**  
@@ -187,9 +187,9 @@ jp2_data.compute_ndvi_for_all()
 
     INFO | utils.py:28 in info_message()
            message: 'Computing NDVI for all scenes'
-    /home/jonathan/anaconda3/envs/kmeans_ndvi/lib/python3.8/site-packages/pyproj/crs/crs.py:131: FutureWarning: '+init=<authority>:<code>' syntax is deprecated. '<authority>:<code>' is the preferred initialization method. When making the change, be mindful of axis order changes: https://pyproj4.github.io/pyproj/stable/gotchas.html#axis-order-changes-in-proj-6
+    /home/ubuntu/anaconda3/envs/mlbmi/lib/python3.8/site-packages/pyproj/crs/crs.py:131: FutureWarning: '+init=<authority>:<code>' syntax is deprecated. '<authority>:<code>' is the preferred initialization method. When making the change, be mindful of axis order changes: https://pyproj4.github.io/pyproj/stable/gotchas.html#axis-order-changes-in-proj-6
       in_crs_string = _prepare_from_proj_string(in_crs_string)
-    /mnt/d/Research/kmeans_ndvi/DataScienceChallenge/git_clone_test/kmeans_doeberitzer_heide_sentinel/kmeans_ndvi/utils.py:257: RuntimeWarning: invalid value encountered in true_divide
+    /mnt/d/Research/mlbmi/MachineLearningBioMassIndiciators/mlbmi/utils.py:257: RuntimeWarning: invalid value encountered in true_divide
       ndvi_masked = np.true_divide(
 
 **Create the NDVI Temporal Image Cube**  
@@ -249,7 +249,7 @@ We developed three visual sanity checks to confirm that the data is sound and th
 3. The third visual sanity check reconstructs the image from the predicted temporal K-Means cluster centers to reveal the regional similarities.
 
 ```python
-from kmeans_ndvi.utils import (
+from mlbmi.utils import (
     sanity_check_ndvi_statistics,
     sanity_check_spatial_kmeans,
     sanity_check_temporal_kmeans
