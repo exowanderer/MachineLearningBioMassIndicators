@@ -3,7 +3,7 @@ from argparse import ArgumentParser
 from dotenv import load_dotenv
 from matplotlib import pyplot as plt
 
-from kmeans_ndvi import (
+from mlbmi import (
     KMeansNDVI,
     info_message,
     warning_message,
@@ -15,7 +15,7 @@ if __name__ == "__main__":
     EXAMPLE_USAGE = """
     Use case (bash):
 
-    python doeberitzer_kmeans_ndvi.py \
+    python doeberitzer_mlbmi.py \
         --band_names b04 b08\
         --start_date 2020-01-01 \
         --end_date 2020-02-01 \
@@ -27,7 +27,7 @@ if __name__ == "__main__":
 
     To access the (paid for) JP2 files instead. Use
 
-    python doeberitzer_kmeans_ndvi.py \
+    python doeberitzer_mlbmi.py \
         --band_names b04 b08\
         --start_date 2020-01-01 \
         --end_date 2020-02-01 \

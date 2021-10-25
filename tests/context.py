@@ -3,7 +3,7 @@ import os
 import sys
 
 # pylint: disable=unused-import
-from kmeans_ndvi import (
+from mlbmi import (
     SentinelAOI,
     SentinelAOIParams,
     KMeansNDVI,
@@ -26,7 +26,7 @@ sys.path.insert(
     os.path.abspath(
         os.path.join(
             os.path.dirname(__file__),
-            "../kmeans_ndvi"
+            "../mlbmi"
         )
     )
 )

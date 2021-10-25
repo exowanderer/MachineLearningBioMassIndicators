@@ -1,4 +1,4 @@
-name: kmeans_ndvi
+name: mlbmi
 channels:
   - conda-forge
   - defaults
@@ -338,4 +338,4 @@ dependencies:
     - rio-cogeo==2.3.1
     - scikit-image==0.18.3
     - tifffile==2021.8.30
-prefix: /home/jonathan/anaconda3/envs/kmeans_ndvi
+prefix: ~/anaconda3/envs/mlbmi
