@@ -15,6 +15,7 @@ from icecream import ic
 # import the wget module
 from wget import download
 
+from .kmeans_utils import sanity_check_ndvi_statistics
 
 ic.configureOutput(includeContext=True)
 
