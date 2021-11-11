@@ -149,7 +149,7 @@ class SentinelAOI:
             intersects=bounding_box['features'][0]['geometry'],
             datetime=eo_datetime,
             query=eo_query,
-            collections=[self.collection]
+            collections=self.collection
         )
         # Use Sat-Search to idenitify and load all meta data from search field
         self.search = Search(

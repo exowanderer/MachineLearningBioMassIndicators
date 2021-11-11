@@ -21,12 +21,8 @@ ic.configureOutput(includeContext=True)
 
 
 def info_message(*args, end='\n', **kwargs):
-    # if args.__len__() == 1:
-    #     args = args[0]
-
     ic.configureOutput(prefix='INFO | ')
 
-    # print(f"[DEBUG] {args}", end=end)
     for arg_ in args:
         ic(arg_)
 
@@ -35,9 +31,6 @@ def info_message(*args, end='\n', **kwargs):
 
 
 def warning_message(*args, end='\n', **kwargs):
-    # if args.__len__() == 1:
-    #     args = args[0]
-
     ic.configureOutput(prefix='WARNING | ')
     for arg_ in args:
         ic(arg_)
@@ -47,9 +40,6 @@ def warning_message(*args, end='\n', **kwargs):
 
 
 def debug_message(*args, end='\n', **kwargs):
-    # if args.__len__() == 1:
-    #     args = args[0]
-
     ic.configureOutput(prefix='DEBUG | ')
     for arg_ in args:
         ic(arg_)
