@@ -20,19 +20,42 @@ from .kmeans_utils import sanity_check_ndvi_statistics
 ic.configureOutput(includeContext=True)
 
 
-def info_message(message, end='\n', *args, **kwargs):
+def info_message(*args, end='\n', **kwargs):
+    # if args.__len__() == 1:
+    #     args = args[0]
+
     ic.configureOutput(prefix='INFO | ')
-    ic(message)
+
+    # print(f"[DEBUG] {args}", end=end)
+    for arg_ in args:
+        ic(arg_)
+
+    for arg_, val_ in kwargs.items():
+        ic(f"{arg_}: {val_}")
 
 
-def warning_message(message, end='\n', *args, **kwargs):
+def warning_message(*args, end='\n', **kwargs):
+    # if args.__len__() == 1:
+    #     args = args[0]
+
     ic.configureOutput(prefix='WARNING | ')
-    ic(message)
+    for arg_ in args:
+        ic(arg_)
+
+    for arg_, val_ in kwargs.items():
+        ic(f"{arg_}: {val_}")
 
 
-def debug_message(message, end='\n', *args, **kwargs):
+def debug_message(*args, end='\n', **kwargs):
+    # if args.__len__() == 1:
+    #     args = args[0]
+
     ic.configureOutput(prefix='DEBUG | ')
-    ic(message)
+    for arg_ in args:
+        ic(arg_)
+
+    for arg_, val_ in kwargs.items():
+        ic(f"{arg_}: {val_}")
 
 
 def bounding_box_coords(gdf):

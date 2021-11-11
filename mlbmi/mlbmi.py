@@ -144,7 +144,13 @@ class SentinelAOI:
 
         # Build a GeoJSON bounding box around AOI(s)
         bounding_box = geom_to_bounding_box(self.gdf)
-
+        debug_message(
+            url=self.url_earth_search,
+            intersects=bounding_box['features'][0]['geometry'],
+            datetime=eo_datetime,
+            query=eo_query,
+            collections=[self.collection]
+        )
         # Use Sat-Search to idenitify and load all meta data from search field
         self.search = Search(
             url=self.url_earth_search,
