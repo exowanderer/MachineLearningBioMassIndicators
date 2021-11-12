@@ -224,8 +224,8 @@ def get_coords_from_geometry(gdf):
 
 
 def compute_ndvi(
-        band04, band08, gdf, n_sig=10, verbose=False, verbose_plot=False,
-        scene_id=None, res=None, date=None, bins=100):
+        band04, band08, gdf, alpha=0, n_sig=10, verbose=False, 
+        verbose_plot=False, scene_id=None, res=None, date=None, bins=100):
     """Compute the NDVI image from band08 and band04 values
 
     Args:
@@ -265,8 +265,8 @@ def compute_ndvi(
 
     # Create NDVI from masked Band04 and Band08
     ndvi_masked = np.true_divide(
-        band08_masked[0] - band04_masked[0],
-        band08_masked[0] + band04_masked[0]
+        alpha + band08_masked[0] - band04_masked[0],
+        alpha + band08_masked[0] + band04_masked[0]
     )
 
     # FIll in missing data (outside mask) as zeros
