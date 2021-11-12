@@ -3,6 +3,7 @@ import os
 import json
 import numpy as np
 
+from matplotlib import pyplot as plt
 from statsmodels.robust import scale
 # from fiona.crs import from_epsg
 # from rasterio import plot
@@ -15,7 +16,6 @@ from icecream import ic
 # import the wget module
 from wget import download
 
-from .kmeans_utils import sanity_check_ndvi_statistics
 
 ic.configureOutput(includeContext=True)
 
@@ -46,6 +46,54 @@ def debug_message(*args, end='\n', **kwargs):
 
     for arg_, val_ in kwargs.items():
         ic(f"{arg_}: {val_}")
+
+def sanity_check_image_statistics(
+        image, scene_id, res, date, image_name=None, bins=100, plot_now=False):
+    """Plot imshow and hist over image
+
+    Args:
+        image (np.arra): iamge with which to visual
+        scene_id (str): Sentinel-2A L2A scene ID
+        res (str): Sentinel-2A L2A resolution
+        date (str): Sentinel-2A L2A acquistion datetime
+        bins (int, optional): Number of bins for histogram. Defaults to 100.
+    """
+
+    # Sanity Check with imshow
+    fig, (ax1, ax2) = plt.subplots(ncols=2, figsize=(20, 5))
+    ax1.imshow(image, interpolation='None')
+    ax1.set_title(
+        f"{image_name} Image: {scene_id} - {res} - {date}",
+        fontsize=20
+    )
+
+    # Remove all unnecessary markers from figure
+    ax1.grid(False)  # remove grid for images
+    ax1.xaxis.set_ticks([])  # remove xticks
+    ax1.yaxis.set_ticks([])  # remove xticks
+
+    # Sanity Check with visual histogram
+    ax2.hist(image.ravel()[(image.ravel() != 0)], bins=bins)
+    for tick in ax2.xaxis.get_major_ticks():
+        tick.label.set_fontsize(20)
+    for tick in ax2.yaxis.get_major_ticks():
+        tick.label.set_fontsize(20)
+
+    plt.subplots_adjust(
+        left=0,
+        right=1,
+        bottom=0,
+        top=.90,
+        wspace=1e-2
+    )
+
+    ax2.set_title(
+        f"{image_name} Hist: {scene_id} - {res} - {date}",
+        fontsize=20
+    )
+
+    if plot_now:
+        plt.show()
 
 
 def bounding_box_coords(gdf):
@@ -292,8 +340,8 @@ def compute_ndvi(
 
     if verbose_plot:
         # Show NDVI image and plot the histogram over its values
-        sanity_check_ndvi_statistics(
-            ndvi_masked, scene_id, res, date, bins=bins
+        sanity_check_image_statistics(
+            ndvi_masked, scene_id, res, date, image_name='NDVI', bins=bins
         )
 
     return ndvi_masked, mask_transform
@@ -319,7 +367,7 @@ def compute_gci(
         bins (int): Number of bins for verbose_plot histograms. Default 100.
 
     Returns:
-        tuple (np.array, affine.Affine): NDVI image and its related transform
+        tuple (np.array, affine.Affine): GCI image and its related transform
     """
     # Convert from MAD to STD because Using the MAD is
     #   more agnostic to outliers than STD
@@ -347,7 +395,7 @@ def compute_gci(
         crop=True
     )
 
-    # Create NDVI from masked Band04 and Band08
+    # Create GCI from masked Band04 and Band08
     gci_masked = np.true_divide(
         alpha + band08_masked[0], alpha + band03_masked[0]
     )
@@ -357,19 +405,96 @@ def compute_gci(
     gci_masked[np.isnan(gci_masked)] = 0
 
     # median replacement from n_sigma outlier rejection
-    med_ndvi = np.median(gci_masked.ravel())
-    std_ndvi = scale.mad(gci_masked.ravel()) * mad2std
+    med_gci = np.median(gci_masked.ravel())
+    std_gci = scale.mad(gci_masked.ravel()) * mad2std
 
-    # Identify outliers as points outside nsig x std_ndvi from median
-    outliers = abs(gci_masked - med_ndvi) > n_sig * std_ndvi
+    # Identify outliers as points outside nsig x std_gci from median
+    outliers = abs(gci_masked - med_gci) > n_sig * std_gci
 
     # Set outliers to median value
-    gci_masked[outliers] = med_ndvi
+    gci_masked[outliers] = med_gci
 
     if verbose_plot:
-        # Show NDVI image and plot the histogram over its values
-        sanity_check_ndvi_statistics(
-            gci_masked, scene_id, res, date, bins=bins
+        # Show GCI image and plot the histogram over its values
+        sanity_check_image_statistics(
+            gci_masked, scene_id, res, date, image_name='GCI', bins=bins
         )
 
     return gci_masked, mask_transform
+
+
+
+def compute_rci(
+        band04, band08, gdf, alpha=0, n_sig=10, verbose=False,
+        verbose_plot=False, scene_id=None, res=None, date=None, bins=100):
+    """Compute the Red Chlorophyll Index image from band08 and band04 values
+
+    Args:
+        band04 (dict): Sentinel-2-L2A Band04 raster data
+        band08 (dict): Sentinel-2-L2A Band08 raster data
+        gdf (gpd.GeoDataFrame): GeoDataFrame with geometry information
+        alpha (float): For alpha > 0, RCI becomes RCI-WDRVI
+        n_sig (int, optional): Number is sigma to quality as an outlier.
+            Defaults to 10.
+        verbose (bool): Toggle to print extra info statements. Default False.
+        verbose_plot (bool): Toggle to plot extra figures. Default False.
+        scene_id (str): Scene ID for verbose_plot figures. Default None.
+        res (str): Resolution for verbose_plot figures. Default None.
+        date (str): Date for verbose_plot figures. Default None.
+        bins (int): Number of bins for verbose_plot histograms. Default 100.
+
+    Returns:
+        tuple (np.array, affine.Affine): RCI image and its related transform
+    """
+    # Convert from MAD to STD because Using the MAD is
+    #   more agnostic to outliers than STD
+    mad2std = 1.4826
+
+    # By definition, the CRS is identical across bands
+    gdf_crs = gdf.to_crs(
+        crs=band04['raster'].crs.data
+    )
+
+    # Compute the AOI coordinates from the raster crs data
+    coords = get_coords_from_geometry(gdf_crs)
+
+    # Mask Band04 data with AOI coords
+    band04_masked, _ = mask(
+        dataset=band04['raster'],
+        shapes=coords,
+        crop=True
+    )
+
+    # Mask Band08 data with AOI coords
+    band08_masked, mask_transform = mask(
+        dataset=band08['raster'],
+        shapes=coords,
+        crop=True
+    )
+
+    # Create RCI from masked Band04 and Band08
+    rci_masked = np.true_divide(
+        alpha + band08_masked[0], alpha + band04_masked[0]
+    )
+    rci_masked = rci_masked - 1
+
+    # FIll in missing data (outside mask) as zeros
+    rci_masked[np.isnan(rci_masked)] = 0
+
+    # median replacement from n_sigma outlier rejection
+    med_rci = np.median(rci_masked.ravel())
+    std_rci = scale.mad(rci_masked.ravel()) * mad2std
+
+    # Identify outliers as points outside nsig x std_rci from median
+    outliers = abs(rci_masked - med_rci) > n_sig * std_rci
+
+    # Set outliers to median value
+    rci_masked[outliers] = med_rci
+
+    if verbose_plot:
+        # Show RCI image and plot the histogram over its values
+        sanity_check_image_statistics(
+            rci_masked, scene_id, res, date, image_name='RCI', bins=bins
+        )
+
+    return rci_masked, mask_transform
