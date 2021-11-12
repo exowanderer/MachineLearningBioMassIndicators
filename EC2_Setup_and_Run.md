@@ -49,13 +49,13 @@ conda config --set channel_priority strict
 # Clone KMeans NDVI Repo
 
 ```bash
-git clone https://github.com/exowanderer/kmeans_doeberitzer_heide_sentinel_l2a
+git clone https://github.com/exowanderer/MachineLearningBioMassIndicators
 ```
 
 # Change directory to github repo
 
 ```bash
-cd kmeans_doeberitzer_heide_sentinel_l2a/
+cd MachineLearningBioMassIndicators/
 ```
 
 # Create mlbmi conda environment
