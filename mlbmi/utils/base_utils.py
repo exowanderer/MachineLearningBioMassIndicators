@@ -297,3 +297,79 @@ def compute_ndvi(
         )
 
     return ndvi_masked, mask_transform
+
+
+def compute_gci(
+        band03, band08, gdf, alpha=0, n_sig=10, verbose=False,
+        verbose_plot=False, scene_id=None, res=None, date=None, bins=100):
+    """Compute the Green Chlorophyll Index image from band08 and band03 values
+
+    Args:
+        band03 (dict): Sentinel-2-L2A Band03 raster data
+        band08 (dict): Sentinel-2-L2A Band08 raster data
+        gdf (gpd.GeoDataFrame): GeoDataFrame with geometry information
+        alpha (float): For alpha > 0, GCI becomes GCI-WDRVI
+        n_sig (int, optional): Number is sigma to quality as an outlier.
+            Defaults to 10.
+        verbose (bool): Toggle to print extra info statements. Default False.
+        verbose_plot (bool): Toggle to plot extra figures. Default False.
+        scene_id (str): Scene ID for verbose_plot figures. Default None.
+        res (str): Resolution for verbose_plot figures. Default None.
+        date (str): Date for verbose_plot figures. Default None.
+        bins (int): Number of bins for verbose_plot histograms. Default 100.
+
+    Returns:
+        tuple (np.array, affine.Affine): NDVI image and its related transform
+    """
+    # Convert from MAD to STD because Using the MAD is
+    #   more agnostic to outliers than STD
+    mad2std = 1.4826
+
+    # By definition, the CRS is identical across bands
+    gdf_crs = gdf.to_crs(
+        crs=band03['raster'].crs.data
+    )
+
+    # Compute the AOI coordinates from the raster crs data
+    coords = get_coords_from_geometry(gdf_crs)
+
+    # Mask Band03 data with AOI coords
+    band03_masked, _ = mask(
+        dataset=band03['raster'],
+        shapes=coords,
+        crop=True
+    )
+
+    # Mask Band08 data with AOI coords
+    band08_masked, mask_transform = mask(
+        dataset=band08['raster'],
+        shapes=coords,
+        crop=True
+    )
+
+    # Create NDVI from masked Band04 and Band08
+    gci_masked = np.true_divide(
+        alpha + band08_masked[0], alpha + band03_masked[0]
+    )
+    gci_masked = gci_masked - 1
+
+    # FIll in missing data (outside mask) as zeros
+    gci_masked[np.isnan(gci_masked)] = 0
+
+    # median replacement from n_sigma outlier rejection
+    med_ndvi = np.median(gci_masked.ravel())
+    std_ndvi = scale.mad(gci_masked.ravel()) * mad2std
+
+    # Identify outliers as points outside nsig x std_ndvi from median
+    outliers = abs(gci_masked - med_ndvi) > n_sig * std_ndvi
+
+    # Set outliers to median value
+    gci_masked[outliers] = med_ndvi
+
+    if verbose_plot:
+        # Show NDVI image and plot the histogram over its values
+        sanity_check_ndvi_statistics(
+            gci_masked, scene_id, res, date, bins=bins
+        )
+
+    return gci_masked, mask_transform
