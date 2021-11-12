@@ -231,8 +231,16 @@ def compute_ndvi(
     Args:
         band04 (dict): Sentinel-2-L2A Band04 raster data
         band08 (dict): Sentinel-2-L2A Band08 raster data
+        gdf (gpd.GeoDataFrame): GeoDataFrame with geometry information
+        alpha (float): For alpha > 0, NDVI becomes WDRVI
         n_sig (int, optional): Number is sigma to quality as an outlier.
             Defaults to 10.
+        verbose (bool): Toggle to print extra info statements. Default False.
+        verbose_plot (bool): Toggle to plot extra figures. Default False.
+        scene_id (str): Scene ID for verbose_plot figures. Default None.
+        res (str): Resolution for verbose_plot figures. Default None.
+        date (str): Date for verbose_plot figures. Default None.
+        bins (int): Number of bins for verbose_plot histograms. Default 100.
 
     Returns:
         tuple (np.array, affine.Affine): NDVI image and its related transform
