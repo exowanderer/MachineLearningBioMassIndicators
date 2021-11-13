@@ -49,6 +49,7 @@ if __name__ == "__main__":
     args.add_argument("--ndvi", action="store_true")
     args.add_argument("--gci", action="store_true")
     args.add_argument("--rci", action="store_true")
+    args.add_argument("--no-scl", action="store_true")
     args.add_argument("--alpha", type=float, default=0)
     args.add_argument("--collection", type=str, default="sentinel-s2-l2a-cogs")
     args.add_argument("--start_date", type=str, default="2020-01-01")
@@ -90,6 +91,9 @@ if __name__ == "__main__":
 
     info_message("Loading JP2 files into data structure")
     jp2_data.load_data_into_struct()
+
+    info_message("Computing SCL Mask for all scenes")
+    jp2_data.create_scl_mask(mask_vals=[0, 1, 2, 3, 7, 8, 9, 10])
 
     if clargs.ndvi:
         info_message("Computing NDVI for all scenes")

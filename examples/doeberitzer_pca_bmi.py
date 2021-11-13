@@ -91,6 +91,9 @@ if __name__ == "__main__":
     info_message("Loading JP2 files into data structure")
     jp2_data.load_data_into_struct()
 
+    info_message("Computing SCL Mask for all scenes")
+    jp2_data.create_scl_mask(mask_vals=[0, 1, 2, 3, 7, 8, 9, 10])
+
     if clargs.ndvi:
         info_message("Computing NDVI for all scenes")
         jp2_data.compute_bmi_for_all(bmi='ndvi')

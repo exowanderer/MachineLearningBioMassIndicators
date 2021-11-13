@@ -21,6 +21,7 @@ from .utils import (
     compute_ndvi,
     compute_gci,
     compute_rci,
+    compute_scl_mask,
     kmeans_spatial_cluster,
     kmeans_temporal_cluster,
     pca_spatial_components,
@@ -87,8 +88,8 @@ class SentinelAOI:
             self, geojson: str,
             start_date: str = '2020-01-01', end_date: str = '2020-02-01',
             cloud_cover: int = 1, collection: str = 'sentinel-s2-l2a-cogs',
-            band_names: list = ['B04', 'B08'], download: bool = False,
-            verbose: bool = False, quiet=False):
+            band_names: list = ['B04', 'B08'], no_scl: bool = False,
+            download: bool = False, verbose: bool = False, quiet=False):
         """[summary]
 
         Args:
@@ -117,6 +118,7 @@ class SentinelAOI:
         self.cloud_cover = cloud_cover
         self.collection = collection
         self.band_names = band_names
+        self.no_scl = no_scl
         self.download = download
         self.verbose = verbose
         self.quiet = quiet
@@ -125,6 +127,11 @@ class SentinelAOI:
             # Force all output to be supressed
             # Useful when iterating over instances
             self.verbose = False
+
+        if self.no_scl:
+            return
+
+        self.band_names.append('SCL')
 
     def search_earth_aws(self):
         """Organize input parameters and call search query to AWS STAC API
@@ -258,12 +265,15 @@ class SentinelAOI:
                 if scene_id_ not in self.scenes.keys():
                     # Set scenes are blank dict per scene
                     self.scenes[scene_id_] = {}
+
                 if res_ not in self.scenes[scene_id_].keys():
                     # Set resolutions dict are blank dict per resolution
                     self.scenes[scene_id_][res_] = {}
+
                 if date_ not in self.scenes[scene_id_][res_].keys():
                     # Set dates dict are blank dict per date
                     self.scenes[scene_id_][res_][date_] = {}
+
                 if bnd_name_ not in self.scenes[scene_id_][res_][date_].keys():
                     # Set band dict are blank dict per band
                     self.scenes[scene_id_][res_][date_][bnd_name_] = {}
@@ -283,6 +293,43 @@ class SentinelAOI:
 
                 # Store the raster in the self.scenes data structure
                 self.scenes[scene_id_][res_][date_][bnd_name_] = raster_
+
+    def create_scl_mask(self, mask_vals=[0, 1, 2, 3, 7, 8, 9, 10]):
+        # required_bands = ['B04', 'B08']
+        # if bmi == 'gci':
+        #     required_bands = ['B03', 'B08']
+        # if bmi == 'rci':
+        #     required_bands = ['B04', 'B08']
+
+        # Behaviour disable=self.quiet allows user to turn off tqdm via CLI
+        scene_iter = tqdm(self.scenes.items(), disable=self.quiet)
+        for scene_id_, res_dict_ in scene_iter:
+            res_iter = tqdm(res_dict_.items(), disable=self.quiet)
+            for res_, date_dict_ in res_iter:
+                date_iter = tqdm(date_dict_.items(), disable=self.quiet)
+                for date_, band_data_ in date_iter:
+                    scl_ = band_data_['SCL'] if 'SCL' in band_data_ else None
+
+                    if scl_ is None:
+                        return
+
+                    scl_mask_, mask_transform_ = compute_scl_mask(
+                        scl=scl_,
+                        mask_vals=mask_vals,
+                        gdf=self.gdf,
+                        scene_id=scene_id_,
+                        res=res_,
+                        date=date_,
+                        bins=self.hist_bins,
+                        verbose=self.verbose,
+                        verbose_plot=self.verbose_plot
+                    )
+
+                    date_dict_ = self.scenes[scene_id_][res_][date_]
+                    date_dict_['scl_mask'] = scl_mask_
+                    date_dict_['transform'] = mask_transform_
+
+                    self.scenes[scene_id_][res_][date_] = date_dict_
 
     def compute_bmi_for_all(self, bmi='ndvi', alpha=0):
         """Cycle over self.scenes and compute BMI for each scene and date_
@@ -314,10 +361,19 @@ class SentinelAOI:
                         )
                         continue
 
+                    # TODO all 3 `compute_bmi` functions accept SCL, but do not
+                    # know what to do with it
+                    # TODO Either have each `compute_bmi` compute which flags
+                    # to ignore in a mask or precompute the mask and send that
+                    # instead of band_data_['SCL']
+                    scl_mask_ = band_data_['scl_mask'] \
+                        if 'scl_mask' in band_data_ else None
+
                     # Compute BMI for individual scene, res, date
                     bmi_masked_, mask_transform_ = compute_bmi(
                         band_data_[required_bands[0]],
                         band_data_[required_bands[1]],
+                        scl_mask=scl_mask_,
                         gdf=self.gdf,
                         alpha=alpha,
                         n_sig=self.n_sig,
@@ -490,7 +546,6 @@ class SentinelAOI:
                 timeseries_dict['timestamps'] = timestamps_
 
                 self.scenes[scene_id_][res_]['timeseries'] = timeseries_dict
-
 
     def compute_rci_for_all(self, alpha=0):
         """Cycle over self.scenes and compute RCI for each scene and date_
@@ -845,6 +900,7 @@ class PCABMI(SentinelAOI):
                 kdict_['pca'][n_components] = pca_
                 self.scenes[scene_id_][res_]['timeseries'] = kdict_
 
+
 class KMeansBMI(SentinelAOI):
     """KMeansBMI sub-class inherits SentinelAOI class and operates KMeans """
 
@@ -1028,4 +1084,3 @@ class KMeansBMI(SentinelAOI):
 
                 kdict_['kmeans'][n_clusters] = kmeans_
                 self.scenes[scene_id_][res_]['timeseries'] = kdict_
-

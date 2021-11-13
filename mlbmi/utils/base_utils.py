@@ -47,6 +47,7 @@ def debug_message(*args, end='\n', **kwargs):
     for arg_, val_ in kwargs.items():
         ic(f"{arg_}: {val_}")
 
+
 def sanity_check_image_statistics(
         image, scene_id, res, date, image_name=None, bins=100, plot_now=False):
     """Plot imshow and hist over image
@@ -82,7 +83,7 @@ def sanity_check_image_statistics(
     plt.subplots_adjust(
         left=0,
         right=1,
-        bottom=0,
+        bottom=0.10,
         top=.90,
         wspace=1e-2
     )
@@ -272,7 +273,7 @@ def get_coords_from_geometry(gdf):
 
 
 def compute_ndvi(
-        band04, band08, gdf, alpha=0, n_sig=10, verbose=False, 
+        band04, band08, gdf, scl_mask=None, alpha=0, n_sig=10, verbose=False,
         verbose_plot=False, scene_id=None, res=None, date=None, bins=100):
     """Compute the NDVI image from band08 and band04 values
 
@@ -338,6 +339,10 @@ def compute_ndvi(
     # Set outliers to median value
     ndvi_masked[outliers] = med_ndvi
 
+    # If the SCL mas exists, then use it to remove 'bad pixels'
+    if scl_mask is not None:
+        ndvi_masked[scl_mask] = 0
+
     if verbose_plot:
         # Show NDVI image and plot the histogram over its values
         sanity_check_image_statistics(
@@ -348,7 +353,7 @@ def compute_ndvi(
 
 
 def compute_gci(
-        band03, band08, gdf, alpha=0, n_sig=10, verbose=False,
+        band03, band08, gdf, scl_mask=None, alpha=0, n_sig=10, verbose=False,
         verbose_plot=False, scene_id=None, res=None, date=None, bins=100):
     """Compute the Green Chlorophyll Index image from band08 and band03 values
 
@@ -414,6 +419,10 @@ def compute_gci(
     # Set outliers to median value
     gci_masked[outliers] = med_gci
 
+    # If the SCL mas exists, then use it to remove 'bad pixels'
+    if scl_mask is not None:
+        gci_masked[scl_mask] = 0
+
     if verbose_plot:
         # Show GCI image and plot the histogram over its values
         sanity_check_image_statistics(
@@ -423,9 +432,8 @@ def compute_gci(
     return gci_masked, mask_transform
 
 
-
 def compute_rci(
-        band04, band08, gdf, alpha=0, n_sig=10, verbose=False,
+        band04, band08, gdf, scl_mask=None, alpha=0, n_sig=10, verbose=False,
         verbose_plot=False, scene_id=None, res=None, date=None, bins=100):
     """Compute the Red Chlorophyll Index image from band08 and band04 values
 
@@ -491,6 +499,10 @@ def compute_rci(
     # Set outliers to median value
     rci_masked[outliers] = med_rci
 
+    # If the SCL mas exists, then use it to remove 'bad pixels'
+    if scl_mask is not None:
+        rci_masked[scl_mask] = 0
+
     if verbose_plot:
         # Show RCI image and plot the histogram over its values
         sanity_check_image_statistics(
@@ -498,3 +510,63 @@ def compute_rci(
         )
 
     return rci_masked, mask_transform
+
+
+def compute_scl_mask(
+        scl, mask_vals, gdf, verbose=False,
+        verbose_plot=False, scene_id=None, res=None, date=None, bins=100):
+    """Compute the Red Chlorophyll Index image from band08 and band04 values
+
+    Args:
+        scl (dict): Sentinel-2-L2A Band04 raster data
+        mask_vals (dict): Sentinel-2-L2A Band08 raster data
+        gdf (gpd.GeoDataFrame): GeoDataFrame with geometry information
+        alpha (float): For alpha > 0, RCI becomes RCI-WDRVI
+        n_sig (int, optional): Number is sigma to quality as an outlier.
+            Defaults to 10.
+        verbose (bool): Toggle to print extra info statements. Default False.
+        verbose_plot (bool): Toggle to plot extra figures. Default False.
+        scene_id (str): Scene ID for verbose_plot figures. Default None.
+        res (str): Resolution for verbose_plot figures. Default None.
+        date (str): Date for verbose_plot figures. Default None.
+        bins (int): Number of bins for verbose_plot histograms. Default 100.
+
+    Returns:
+        tuple (np.array, affine.Affine): RCI image and its related transform
+    """
+
+    # Convert from MAD to STD because Using the MAD is
+    #   more agnostic to outliers than STD
+    mad2std = 1.4826
+
+    # By definition, the CRS is identical across bands
+    gdf_crs = gdf.to_crs(
+        crs=scl['raster'].crs.data
+    )
+
+    # Compute the AOI coordinates from the raster crs data
+    coords = get_coords_from_geometry(gdf_crs)
+
+    # Mask Band04 data with AOI coords
+    scl_masked_, mask_transform = mask(
+        dataset=scl['raster'],
+        shapes=coords,
+        crop=True
+    )
+
+    scl_mask = np.ones_like(scl_masked_, dtype=bool)
+    for val in mask_vals:
+        scl_mask[scl_masked_ == val] = False
+
+    # FIll in missing data (outside mask) as zeros
+    scl_mask[np.isnan(scl_mask)] = 0
+
+    # median replacement from n_sigma outlier rejection
+
+    if verbose_plot:
+        # Show RCI image and plot the histogram over its values
+        sanity_check_image_statistics(
+            scl_mask[0], scene_id, res, date, image_name='SCL', bins=bins
+        )
+
+    return scl_mask, mask_transform
