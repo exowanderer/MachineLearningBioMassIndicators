@@ -19,6 +19,8 @@ from .utils import (
     get_prefix_filepath,
     download_tile_band,
     compute_ndvi,
+    compute_gci,
+    compute_rci,
     kmeans_spatial_cluster,
     kmeans_temporal_cluster,
     pca_spatial_components,
@@ -44,8 +46,8 @@ class SentinelAOIParams:
 
 
 @dataclass
-class KMeansNDVIParams:
-    """Class for KMeansNDVI Input Params"""
+class KMeansBMIParams:
+    """Class for KMeansBMI Input Params"""
     geojson: str = 'doeberitzer_multipolygon.geojson'
     band_names: List[str] = field(default_factory=lambda: ['B04', 'B08'])
     collection: str = 'sentinel-s2-l2a-cogs'
@@ -62,8 +64,8 @@ class KMeansNDVIParams:
 
 
 @dataclass
-class PCANDVIParams:
-    """Class for PCANDVI Input Params"""
+class PCABMIParams:
+    """Class for PCABMI Input Params"""
     geojson: str = 'doeberitzer_multipolygon.geojson'
     band_names: List[str] = field(default_factory=lambda: ['B04', 'B08'])
     collection: str = 'sentinel-s2-l2a-cogs'
@@ -282,6 +284,291 @@ class SentinelAOI:
                 # Store the raster in the self.scenes data structure
                 self.scenes[scene_id_][res_][date_][bnd_name_] = raster_
 
+    def compute_bmi_for_all(self, bmi='ndvi', alpha=0):
+        """Cycle over self.scenes and compute BMI for each scene and date_
+        """
+        compute_bmi = compute_ndvi
+        required_bands = ['B04', 'B08']
+        if bmi == 'gci':
+            compute_bmi = compute_gci
+            required_bands = ['B03', 'B08']
+        if bmi == 'rci':
+            compute_bmi = compute_rci
+            required_bands = ['B04', 'B08']
+
+        # Behaviour disable=self.quiet allows user to turn off tqdm via CLI
+        scene_iter = tqdm(self.scenes.items(), disable=self.quiet)
+        for scene_id_, res_dict_ in scene_iter:
+            res_iter = tqdm(res_dict_.items(), disable=self.quiet)
+            for res_, date_dict_ in res_iter:
+                date_iter = tqdm(date_dict_.items(), disable=self.quiet)
+                for date_, band_data_ in date_iter:
+                    has_bands = np.any([
+                        band_ in band_data_.keys()
+                        for band_ in required_bands
+                    ])
+                    if not has_bands:
+                        warning_message(
+                            f'{bmi.upper()} cannot be computed without '
+                            + ' and '.join(required_bands)
+                        )
+                        continue
+
+                    # Compute BMI for individual scene, res, date
+                    bmi_masked_, mask_transform_ = compute_bmi(
+                        band_data_[required_bands[0]],
+                        band_data_[required_bands[1]],
+                        gdf=self.gdf,
+                        alpha=alpha,
+                        n_sig=self.n_sig,
+                        scene_id=scene_id_,
+                        res=res_,
+                        date=date_,
+                        bins=self.hist_bins,
+                        verbose=self.verbose,
+                        verbose_plot=self.verbose_plot
+                    )
+
+                    # Store the BMI and masked transform in data struct
+                    # Behaviour below used to maintain 79 characters per line
+                    date_dict_ = self.scenes[scene_id_][res_][date_]
+                    date_dict_[bmi] = bmi_masked_
+                    date_dict_['transform'] = mask_transform_
+
+                    self.scenes[scene_id_][res_][date_] = date_dict_
+
+    def allocate_bmi_timeseries(self, bmi='ndvi'):
+        """Allocate BMI images per scene and date inot time series
+        """
+        scene_iter = tqdm(self.scenes.items(), disable=self.quiet)
+        for scene_id_, res_dict_ in scene_iter:
+            res_iter = tqdm(res_dict_.items(), disable=self.quiet)
+            for res_, date_dict_ in res_iter:
+                timestamps_ = []  # Create blank list for datetime stampes
+                timeseries_ = []  # Create blank list for BMI data
+                date_iter = tqdm(date_dict_.items(), disable=self.quiet)
+                for date_, dict_ in date_iter:
+                    if bmi not in dict_.keys():
+                        warning_message(
+                            f"{scene_id_} - {res_} - {date_}: " + "\n"
+                            f"{bmi} not in date_dict_[{date_}].keys()"
+                        )
+                        continue
+
+                    if date_ != 'timeseries':
+                        # Append this time stamp to timestamps_ list
+                        timestamps_.append(datetime.fromisoformat(date_))
+
+                        # Append this BMI to timeseries_ list
+                        timeseries_.append(dict_[bmi])
+
+                # Redefine the list of arrays to array of arrays (image cube)
+                timeseries_ = np.array(timeseries_)
+
+                # store in 'timeseries' dict inside self.scenes data structure
+                # Behaviour below used to maintain 79 characters per line
+                timeseries_dict = {}
+                timeseries_dict[bmi] = timeseries_
+                timeseries_dict['timestamps'] = timestamps_
+
+                self.scenes[scene_id_][res_]['timeseries'] = timeseries_dict
+
+    def compute_ndvi_for_all(self, alpha=0):
+        """Cycle over self.scenes and compute NDVI for each scene and date_
+        """
+        # Behaviour disable=self.quiet allows user to turn off tqdm via CLI
+        scene_iter = tqdm(self.scenes.items(), disable=self.quiet)
+        for scene_id_, res_dict_ in scene_iter:
+            res_iter = tqdm(res_dict_.items(), disable=self.quiet)
+            for res_, date_dict_ in res_iter:
+                date_iter = tqdm(date_dict_.items(), disable=self.quiet)
+                for date_, band_data_ in date_iter:
+                    if 'B04' not in band_data_.keys() and \
+                            'B08' not in band_data_.keys():
+                        warning_message(
+                            'NDVI cannot be computed without '
+                            'both Band04 and Band08'
+                        )
+                        continue
+
+                    # Compute NDVI for individual scene, res, date
+                    ndvi_masked_, mask_transform_ = compute_ndvi(
+                        band_data_['B04'],
+                        band_data_['B08'],
+                        gdf=self.gdf,
+                        alpha=alpha,
+                        n_sig=self.n_sig,
+                        scene_id=scene_id_,
+                        res=res_,
+                        date=date_,
+                        bins=self.hist_bins,
+                        verbose=self.verbose,
+                        verbose_plot=self.verbose_plot
+                    )
+
+                    # Store the NDVI and masked transform in data struct
+                    # Behaviour below used to maintain 79 characters per line
+                    date_dict_ = self.scenes[scene_id_][res_][date_]
+                    date_dict_['ndvi'] = ndvi_masked_
+                    date_dict_['transform'] = mask_transform_
+
+                    self.scenes[scene_id_][res_][date_] = date_dict_
+
+    def compute_gci_for_all(self, alpha=0):
+        """Cycle over self.scenes and compute GCI for each scene and date_
+        """
+        # Behaviour disable=self.quiet allows user to turn off tqdm via CLI
+        scene_iter = tqdm(self.scenes.items(), disable=self.quiet)
+        for scene_id_, res_dict_ in scene_iter:
+            res_iter = tqdm(res_dict_.items(), disable=self.quiet)
+            for res_, date_dict_ in res_iter:
+                date_iter = tqdm(date_dict_.items(), disable=self.quiet)
+                for date_, band_data_ in date_iter:
+                    if 'B03' not in band_data_.keys() and \
+                            'B08' not in band_data_.keys():
+                        warning_message(
+                            'GCI cannot be computed without '
+                            'both Band03 and Band08'
+                        )
+                        continue
+
+                    # Compute GCI for individual scene, res, date
+                    gci_masked_, mask_transform_ = compute_gci(
+                        band_data_['B03'],
+                        band_data_['B08'],
+                        gdf=self.gdf,
+                        alpha=alpha,
+                        n_sig=self.n_sig,
+                        scene_id=scene_id_,
+                        res=res_,
+                        date=date_,
+                        bins=self.hist_bins,
+                        verbose=self.verbose,
+                        verbose_plot=self.verbose_plot
+                    )
+
+                    # Store the GCI and masked transform in data struct
+                    # Behaviour below used to maintain 79 characters per line
+                    date_dict_ = self.scenes[scene_id_][res_][date_]
+                    date_dict_['gci'] = gci_masked_
+                    date_dict_['transform'] = mask_transform_
+
+                    self.scenes[scene_id_][res_][date_] = date_dict_
+
+    def allocate_gci_timeseries(self):
+        """Allocate GCI images per scene and date inot time series
+        """
+        scene_iter = tqdm(self.scenes.items(), disable=self.quiet)
+        for scene_id_, res_dict_ in scene_iter:
+            res_iter = tqdm(res_dict_.items(), disable=self.quiet)
+            for res_, date_dict_ in res_iter:
+                timestamps_ = []  # Create blank list for datetime stampes
+                timeseries_ = []  # Create blank list for GCI data
+                date_iter = tqdm(date_dict_.items(), disable=self.quiet)
+                for date_, dict_ in date_iter:
+                    if 'gci' not in dict_.keys():
+                        warning_message(
+                            f"{scene_id_} - {res_} - {date_}: " + "\n"
+                            f"'gci' not in date_dict_[{date_}].keys()"
+                        )
+                        continue
+
+                    if date_ != 'timeseries':
+                        # Append this time stamp to timestamps_ list
+                        timestamps_.append(datetime.fromisoformat(date_))
+
+                        # Append this GCI to timeseries_ list
+                        timeseries_.append(dict_['gci'])
+
+                # Redefine the list of arrays to array of arrays (image cube)
+                timeseries_ = np.array(timeseries_)
+
+                # store in 'timeseries' dict inside self.scenes data structure
+                # Behaviour below used to maintain 79 characters per line
+                timeseries_dict = {}
+                timeseries_dict['gci'] = timeseries_
+                timeseries_dict['timestamps'] = timestamps_
+
+                self.scenes[scene_id_][res_]['timeseries'] = timeseries_dict
+
+
+    def compute_rci_for_all(self, alpha=0):
+        """Cycle over self.scenes and compute RCI for each scene and date_
+        """
+        # Behaviour disable=self.quiet allows user to turn off tqdm via CLI
+        scene_iter = tqdm(self.scenes.items(), disable=self.quiet)
+        for scene_id_, res_dict_ in scene_iter:
+            res_iter = tqdm(res_dict_.items(), disable=self.quiet)
+            for res_, date_dict_ in res_iter:
+                date_iter = tqdm(date_dict_.items(), disable=self.quiet)
+                for date_, band_data_ in date_iter:
+                    if 'B04' not in band_data_.keys() and \
+                            'B08' not in band_data_.keys():
+                        warning_message(
+                            'RCI cannot be computed without '
+                            'both Band04 and Band08'
+                        )
+                        continue
+
+                    # Compute RCI for individual scene, res, date
+                    rci_masked_, mask_transform_ = compute_rci(
+                        band_data_['B04'],
+                        band_data_['B08'],
+                        gdf=self.gdf,
+                        alpha=alpha,
+                        n_sig=self.n_sig,
+                        scene_id=scene_id_,
+                        res=res_,
+                        date=date_,
+                        bins=self.hist_bins,
+                        verbose=self.verbose,
+                        verbose_plot=self.verbose_plot
+                    )
+
+                    # Store the RCI and masked transform in data struct
+                    # Behaviour below used to maintain 79 characters per line
+                    date_dict_ = self.scenes[scene_id_][res_][date_]
+                    date_dict_['rci'] = rci_masked_
+                    date_dict_['transform'] = mask_transform_
+
+                    self.scenes[scene_id_][res_][date_] = date_dict_
+
+    def allocate_rci_timeseries(self):
+        """Allocate RCI images per scene and date inot time series
+        """
+        scene_iter = tqdm(self.scenes.items(), disable=self.quiet)
+        for scene_id_, res_dict_ in scene_iter:
+            res_iter = tqdm(res_dict_.items(), disable=self.quiet)
+            for res_, date_dict_ in res_iter:
+                timestamps_ = []  # Create blank list for datetime stampes
+                timeseries_ = []  # Create blank list for RCI data
+                date_iter = tqdm(date_dict_.items(), disable=self.quiet)
+                for date_, dict_ in date_iter:
+                    if 'rci' not in dict_.keys():
+                        warning_message(
+                            f"{scene_id_} - {res_} - {date_}: " + "\n"
+                            f"'rci' not in date_dict_[{date_}].keys()"
+                        )
+                        continue
+
+                    if date_ != 'timeseries':
+                        # Append this time stamp to timestamps_ list
+                        timestamps_.append(datetime.fromisoformat(date_))
+
+                        # Append this RCI to timeseries_ list
+                        timeseries_.append(dict_['rci'])
+
+                # Redefine the list of arrays to array of arrays (image cube)
+                timeseries_ = np.array(timeseries_)
+
+                # store in 'timeseries' dict inside self.scenes data structure
+                # Behaviour below used to maintain 79 characters per line
+                timeseries_dict = {}
+                timeseries_dict['rci'] = timeseries_
+                timeseries_dict['timestamps'] = timestamps_
+
+                self.scenes[scene_id_][res_]['timeseries'] = timeseries_dict
+
     def save_results(self, save_filename):
         info_message(f'Saving Results to JobLib file: {save_filename}')
         save_dict_ = {}
@@ -367,251 +654,8 @@ class SentinelAOI:
         return self.__repr__()
 
 
-class KMeansNDVI(SentinelAOI):
-    """Class to contain STAC Sentinel-2 Data Structure"""
-
-    def __init__(
-            self, geojson: str,
-            start_date: str = '2020-01-01',
-            end_date: str = '2020-02-01',
-            cloud_cover: int = 1,
-            collection: str = 'sentinel-s2-l2a-cogs',
-            band_names: list = ['B04', 'B08'],
-            download: bool = False,
-            n_clusters: int = 5,
-            n_sig: int = 10,
-            quantile_range: list = [1, 99],
-            verbose: bool = False,
-            verbose_plot: bool = False,
-            hist_bins: int = 100,
-            quiet: bool = False
-    ):
-        """[summary]
-
-        Args:
-            geojson (str): filepath to geojson for AOI [Inherited]
-            start_date (str, optional): start date for STAC query.
-                Defaults to '2020-01-01'. [Inherited]
-            end_date (str, optional): end date for STAC Query.
-                Defaults to '2020-02-01'. [Inherited]
-            cloud_cover (int, optional): Percent cloud cover maximum.
-                Defaults to 1. [Inherited]
-            collection (str, optional): S3 bucket collection for STAC_API_URL.
-                Defaults to 'sentinel-s2-l2a-cogs'. [Inherited]
-            band_names (list, optional): Sentinel-2 band names.
-                Defaults to ['B04', 'B08']. [Inherited]
-            download (bool, optional): Flag whether to initate a download
-                (costs money). Defaults to False. [Inherited]
-            n_clusters (int, optional): number of clusters to operate K-Means.
-                Defaults to 5.
-            n_sig (int, optional): Number of sigma to flag outliers.
-                Defaults to 10.
-            quantile_range (list, optional): Range of distribution to
-                RobustScale. Defaults to [1, 99].
-            verbose (bool, optional): Flag whether to output extra print
-                statemetns to stdout. Defaults to False. [Inherited]
-            verbose_plot (bool, optional): Flag whether to display extra
-                matplotlib figures. Defaults to False.
-            hist_bins (int, optional): number of bins in matplotlib plt.hist.
-                Defaults to 100.
-            quiet (bool, optional): Flag to turn off all text and visual output
-        """
-        super().__init__(
-            geojson=geojson,
-            start_date=start_date,
-            end_date=end_date,
-            cloud_cover=cloud_cover,
-            collection=collection,
-            band_names=band_names,
-            download=download,
-            verbose=verbose,
-            quiet=quiet
-        )
-        self.n_clusters = n_clusters
-        self.n_sig = n_sig
-        self.quantile_range = quantile_range
-        self.verbose = verbose
-        self.verbose_plot = verbose_plot
-        self.hist_bins = hist_bins
-        self.quiet = quiet
-
-        if self.quiet:
-            # Force all output to be supressed
-            # Useful when iterating over instances
-            self.verbose = False
-            self.verbose_plot = False
-
-    def compute_ndvi_for_all(self):
-        """Cycle over self.scenes and compute NDVI for each scene and date_
-        """
-        # Behaviour disable=self.quiet allows user to turn off tqdm via CLI
-        scene_iter = tqdm(self.scenes.items(), disable=self.quiet)
-        for scene_id_, res_dict_ in scene_iter:
-            res_iter = tqdm(res_dict_.items(), disable=self.quiet)
-            for res_, date_dict_ in res_iter:
-                date_iter = tqdm(date_dict_.items(), disable=self.quiet)
-                for date_, band_data_ in date_iter:
-                    if 'B04' not in band_data_.keys() and \
-                            'B08' not in band_data_.keys():
-                        warning_message(
-                            'NDVI cannot be computed without '
-                            'both Band04 and Band08'
-                        )
-                        continue
-
-                    # Compute NDVI for individual scene, res, date
-                    ndvi_masked_, mask_transform_ = compute_ndvi(
-                        band_data_['B04'],
-                        band_data_['B08'],
-                        gdf=self.gdf,
-                        n_sig=self.n_sig,
-                        scene_id=scene_id_,
-                        res=res_,
-                        date=date_,
-                        bins=self.hist_bins,
-                        verbose=self.verbose,
-                        verbose_plot=self.verbose_plot
-                    )
-
-                    # Store the NDVI and masked transform in data struct
-                    # Behaviour below used to maintain 79 characters per line
-                    date_dict_ = self.scenes[scene_id_][res_][date_]
-                    date_dict_['ndvi'] = ndvi_masked_
-                    date_dict_['transform'] = mask_transform_
-
-                    self.scenes[scene_id_][res_][date_] = date_dict_
-
-    def allocate_ndvi_timeseries(self):
-        """Allocate NDVI images per scene and date inot time series
-        """
-        scene_iter = tqdm(self.scenes.items(), disable=self.quiet)
-        for scene_id_, res_dict_ in scene_iter:
-            res_iter = tqdm(res_dict_.items(), disable=self.quiet)
-            for res_, date_dict_ in res_iter:
-                timestamps_ = []  # Create blank list for datetime stampes
-                timeseries_ = []  # Create blank list for NDVI data
-                date_iter = tqdm(date_dict_.items(), disable=self.quiet)
-                for date_, dict_ in date_iter:
-                    if 'ndvi' not in dict_.keys():
-                        warning_message(
-                            f"{scene_id_} - {res_} - {date_}: " + "\n"
-                            f"'ndvi' not in date_dict_[{date_}].keys()"
-                        )
-                        continue
-
-                    if date_ != 'timeseries':
-                        # Append this time stamp to timestamps_ list
-                        timestamps_.append(datetime.fromisoformat(date_))
-
-                        # Append this NDVI to timeseries_ list
-                        timeseries_.append(dict_['ndvi'])
-
-                # Redefine the list of arrays to array of arrays (image cube)
-                timeseries_ = np.array(timeseries_)
-
-                # store in 'timeseries' dict inside self.scenes data structure
-                # Behaviour below used to maintain 79 characters per line
-                timeseries_dict = {}
-                timeseries_dict['ndvi'] = timeseries_
-                timeseries_dict['timestamps'] = timestamps_
-
-                self.scenes[scene_id_][res_]['timeseries'] = timeseries_dict
-
-    def compute_spatial_kmeans(self, n_clusters=None):
-        """Cycle through all NDVI and Compute NDVI for each Scene, Resolution,
-            and Date
-
-        Args:
-            n_clusters (int, optional): Allow user to override the n_clusters
-                used in K-Means when hyperparameter optimizeding.
-                Defaults to None.
-        """
-        # Allow user to override n_clusters
-        n_clusters = self.n_clusters if n_clusters is None else n_clusters
-
-        scene_iter = tqdm(self.scenes.items(), disable=self.quiet)
-        for scene_id_, res_dict_ in scene_iter:
-            res_iter = tqdm(res_dict_.items(), disable=self.quiet)
-            for res_, date_dict_ in res_iter:
-                date_iter = tqdm(date_dict_.items(), disable=self.quiet)
-                for date_, band_data_ in date_iter:
-                    if 'B04' not in band_data_.keys() and \
-                            'B08' not in band_data_.keys():
-                        warning_message(
-                            'NDVI cannot be computed without both '
-                            'Band04 and Band08'
-                        )
-                        continue
-
-                    # Compute K-Means Spatial Clustering per Image
-                    kmeans_ = kmeans_spatial_cluster(
-                        self.scenes[scene_id_][res_][date_]['ndvi'],
-                        n_clusters=n_clusters,
-                        quantile_range=self.quantile_range,
-                        verbose=self.verbose,
-                        verbose_plot=self.verbose_plot,
-                        scene_id=scene_id_,
-                        res=res_,
-                        date=date_
-                    )
-
-                    # Store the result in the self.scenes data structure
-                    # This behaviour is used to maintain 79 characters per line
-                    kdict_ = self.scenes[scene_id_][res_][date_]
-                    if 'kmeans' not in kdict_.keys():
-                        kdict_['kmeans'] = {}
-
-                    kdict_['kmeans'][n_clusters] = kmeans_
-                    self.scenes[scene_id_][res_][date_] = kdict_
-
-    def compute_temporal_kmeans(self, n_clusters=None):
-        """Cycle over all NDVI time series and Compute NDVI for each Scene,
-            Resolution, and Date
-
-        Args:
-            n_clusters (int, optional): Allow user to override the n_clusters
-                used in K-Means when hyperparameter optimizeding.
-                Defaults to None.
-        """
-        # Allow user to override n_clusters
-        n_clusters = self.n_clusters if n_clusters is None else n_clusters
-
-        scene_iter = tqdm(self.scenes.items(), disable=self.quiet)
-        for scene_id_, res_dict_ in scene_iter:
-            res_iter = tqdm(res_dict_.items(), disable=self.quiet)
-            for res_, date_dict_ in res_iter:
-                if 'timeseries' not in date_dict_.keys():
-                    continue
-                if date_dict_['timeseries']['ndvi'].size == 0:
-                    warning_message(
-                        f'Temporal NDVI does not exist for '
-                        f'{scene_id_} at {res_}'
-                    )
-                    continue
-
-                # Compute K-Means Spatial Clustering per Image
-                kmeans_ = kmeans_temporal_cluster(
-                    date_dict_['timeseries']['ndvi'],
-                    n_clusters=n_clusters,
-                    quantile_range=self.quantile_range,
-                    verbose=self.verbose,
-                    verbose_plot=self.verbose_plot,
-                    scene_id=scene_id_,
-                    res=res_
-                )
-
-                # Store the result in the self.scenes data structure
-                # This behaviour is used to maintaint 79 characters per line
-                kdict_ = self.scenes[scene_id_][res_]['timeseries']
-                if 'kmeans' not in kdict_.keys():
-                    kdict_['kmeans'] = {}
-
-                kdict_['kmeans'][n_clusters] = kmeans_
-                self.scenes[scene_id_][res_]['timeseries'] = kdict_
-
-
-class PCANDVI(SentinelAOI):
-    """Class to contain STAC Sentinel-2 Data Structure"""
+class PCABMI(SentinelAOI):
+    """PCABMI sub-class inherits SentinelAOI class and operates PCA """
 
     def __init__(
             self, geojson: str,
@@ -684,84 +728,8 @@ class PCANDVI(SentinelAOI):
             self.verbose = False
             self.verbose_plot = False
 
-    def compute_ndvi_for_all(self):
-        """Cycle over self.scenes and compute NDVI for each scene and date_
-        """
-        # Behaviour disable=self.quiet allows user to turn off tqdm via CLI
-        scene_iter = tqdm(self.scenes.items(), disable=self.quiet)
-        for scene_id_, res_dict_ in scene_iter:
-            res_iter = tqdm(res_dict_.items(), disable=self.quiet)
-            for res_, date_dict_ in res_iter:
-                date_iter = tqdm(date_dict_.items(), disable=self.quiet)
-                for date_, band_data_ in date_iter:
-                    if 'B04' not in band_data_.keys() and \
-                            'B08' not in band_data_.keys():
-                        warning_message(
-                            'NDVI cannot be computed without '
-                            'both Band04 and Band08'
-                        )
-                        continue
-
-                    # Compute NDVI for individual scene, res, date
-                    ndvi_masked_, mask_transform_ = compute_ndvi(
-                        band_data_['B04'],
-                        band_data_['B08'],
-                        gdf=self.gdf,
-                        n_sig=self.n_sig,
-                        scene_id=scene_id_,
-                        res=res_,
-                        date=date_,
-                        bins=self.hist_bins,
-                        verbose=self.verbose,
-                        verbose_plot=self.verbose_plot
-                    )
-
-                    # Store the NDVI and masked transform in data struct
-                    # Behaviour below used to maintain 79 characters per line
-                    date_dict_ = self.scenes[scene_id_][res_][date_]
-                    date_dict_['ndvi'] = ndvi_masked_
-                    date_dict_['transform'] = mask_transform_
-
-                    self.scenes[scene_id_][res_][date_] = date_dict_
-
-    def allocate_ndvi_timeseries(self):
-        """Allocate NDVI images per scene and date inot time series
-        """
-        scene_iter = tqdm(self.scenes.items(), disable=self.quiet)
-        for scene_id_, res_dict_ in scene_iter:
-            res_iter = tqdm(res_dict_.items(), disable=self.quiet)
-            for res_, date_dict_ in res_iter:
-                timestamps_ = []  # Create blank list for datetime stampes
-                timeseries_ = []  # Create blank list for NDVI data
-                date_iter = tqdm(date_dict_.items(), disable=self.quiet)
-                for date_, dict_ in date_iter:
-                    if 'ndvi' not in dict_.keys():
-                        warning_message(
-                            f"{scene_id_} - {res_} - {date_}: " + "\n"
-                            f"'ndvi' not in date_dict_[{date_}].keys()"
-                        )
-                        continue
-
-                    if date_ != 'timeseries':
-                        # Append this time stamp to timestamps_ list
-                        timestamps_.append(datetime.fromisoformat(date_))
-
-                        # Append this NDVI to timeseries_ list
-                        timeseries_.append(dict_['ndvi'])
-
-                # Redefine the list of arrays to array of arrays (image cube)
-                timeseries_ = np.array(timeseries_)
-
-                # store in 'timeseries' dict inside self.scenes data structure
-                # Behaviour below used to maintain 79 characters per line
-                timeseries_dict = {}
-                timeseries_dict['ndvi'] = timeseries_
-                timeseries_dict['timestamps'] = timestamps_
-
-                self.scenes[scene_id_][res_]['timeseries'] = timeseries_dict
-
-    def compute_spatial_pca(self, n_components=None):
-        """Cycle through all NDVI and Compute NDVI for each Scene, Resolution,
+    def compute_spatial_pca(self, bmi='ndvi', n_components=None):
+        """Cycle through all BMI and Compute BMI for each Scene, Resolution,
             and Date
 
         Args:
@@ -770,7 +738,14 @@ class PCANDVI(SentinelAOI):
                 Defaults to None.
         """
         # Allow user to override n_components
-        n_components = self.n_components if n_components is None else n_components
+        n_components = self.n_components \
+            if n_components is None else n_components
+
+        required_bands = ['B04', 'B08']
+        if bmi == 'gci':
+            required_bands = ['B03', 'B08']
+        if bmi == 'rci':
+            required_bands = ['B04', 'B08']
 
         scene_iter = tqdm(self.scenes.items(), disable=self.quiet)
         for scene_id_, res_dict_ in scene_iter:
@@ -778,17 +753,28 @@ class PCANDVI(SentinelAOI):
             for res_, date_dict_ in res_iter:
                 date_iter = tqdm(date_dict_.items(), disable=self.quiet)
                 for date_, band_data_ in date_iter:
-                    if 'B04' not in band_data_.keys() and \
-                            'B08' not in band_data_.keys():
+                    if bmi not in self.scenes[scene_id_][res_][date_].keys():
                         warning_message(
-                            'NDVI cannot be computed without both '
-                            'Band04 and Band08'
+                            f'{bmi.upper()} does not exist in scenes for '
+                            f'scene_id_:{scene_id_}; res_:{res_}; date_:{date_}'
+                        )
+                        continue
+
+                    has_bands = np.any([
+                        band_ not in band_data_.keys()
+                        for band_ in required_bands
+                    ])
+
+                    if has_bands:
+                        warning_message(
+                            f'{bmi.upper()} cannot be computed without '
+                            + ' and '.join(required_bands)
                         )
                         continue
 
                     # Compute K-Means Spatial Clustering per Image
                     pca_ = pca_spatial_components(
-                        self.scenes[scene_id_][res_][date_]['ndvi'],
+                        self.scenes[scene_id_][res_][date_][bmi],
                         n_components=n_components,
                         quantile_range=self.quantile_range,
                         verbose=self.verbose,
@@ -807,8 +793,8 @@ class PCANDVI(SentinelAOI):
                     kdict_['pca'][n_components] = pca_
                     self.scenes[scene_id_][res_][date_] = kdict_
 
-    def compute_temporal_pca(self, n_components=None):
-        """Cycle over all NDVI time series and Compute NDVI for each Scene,
+    def compute_temporal_pca(self, bmi='ndvi', n_components=None):
+        """Cycle over all BMI time series and Compute BMI for each Scene,
             Resolution, and Date
 
         Args:
@@ -825,16 +811,23 @@ class PCANDVI(SentinelAOI):
             for res_, date_dict_ in res_iter:
                 if 'timeseries' not in date_dict_.keys():
                     continue
-                if date_dict_['timeseries']['ndvi'].size == 0:
+
+                if bmi not in date_dict_['timeseries'].keys():
                     warning_message(
-                        f'Temporal NDVI does not exist for '
+                        f'Temporal {bmi} does not exist for '
                         f'{scene_id_} at {res_}'
+                    )
+                    continue
+
+                if date_dict_['timeseries'][bmi].size == 0:
+                    warning_message(
+                        f'Temporal {bmi} is empty for {scene_id_} at {res_}'
                     )
                     continue
 
                 # Compute K-Means Spatial Clustering per Image
                 pca_ = pca_temporal_components(
-                    date_dict_['timeseries']['ndvi'],
+                    date_dict_['timeseries'][bmi],
                     n_components=n_components,
                     quantile_range=self.quantile_range,
                     verbose=self.verbose,
@@ -851,3 +844,188 @@ class PCANDVI(SentinelAOI):
 
                 kdict_['pca'][n_components] = pca_
                 self.scenes[scene_id_][res_]['timeseries'] = kdict_
+
+class KMeansBMI(SentinelAOI):
+    """KMeansBMI sub-class inherits SentinelAOI class and operates KMeans """
+
+    def __init__(
+            self, geojson: str,
+            start_date: str = '2020-01-01',
+            end_date: str = '2020-02-01',
+            cloud_cover: int = 1,
+            collection: str = 'sentinel-s2-l2a-cogs',
+            band_names: list = ['B04', 'B08'],
+            download: bool = False,
+            n_clusters: int = 5,
+            n_sig: int = 10,
+            quantile_range: list = [1, 99],
+            verbose: bool = False,
+            verbose_plot: bool = False,
+            hist_bins: int = 100,
+            quiet: bool = False
+    ):
+        """[summary]
+
+        Args:
+            geojson (str): filepath to geojson for AOI [Inherited]
+            start_date (str, optional): start date for STAC query.
+                Defaults to '2020-01-01'. [Inherited]
+            end_date (str, optional): end date for STAC Query.
+                Defaults to '2020-02-01'. [Inherited]
+            cloud_cover (int, optional): Percent cloud cover maximum.
+                Defaults to 1. [Inherited]
+            collection (str, optional): S3 bucket collection for STAC_API_URL.
+                Defaults to 'sentinel-s2-l2a-cogs'. [Inherited]
+            band_names (list, optional): Sentinel-2 band names.
+                Defaults to ['B04', 'B08']. [Inherited]
+            download (bool, optional): Flag whether to initate a download
+                (costs money). Defaults to False. [Inherited]
+            n_clusters (int, optional): number of clusters to operate K-Means.
+                Defaults to 5.
+            n_sig (int, optional): Number of sigma to flag outliers.
+                Defaults to 10.
+            quantile_range (list, optional): Range of distribution to
+                RobustScale. Defaults to [1, 99].
+            verbose (bool, optional): Flag whether to output extra print
+                statemetns to stdout. Defaults to False. [Inherited]
+            verbose_plot (bool, optional): Flag whether to display extra
+                matplotlib figures. Defaults to False.
+            hist_bins (int, optional): number of bins in matplotlib plt.hist.
+                Defaults to 100.
+            quiet (bool, optional): Flag to turn off all text and visual output
+        """
+        super().__init__(
+            geojson=geojson,
+            start_date=start_date,
+            end_date=end_date,
+            cloud_cover=cloud_cover,
+            collection=collection,
+            band_names=band_names,
+            download=download,
+            verbose=verbose,
+            quiet=quiet
+        )
+        self.n_clusters = n_clusters
+        self.n_sig = n_sig
+        self.quantile_range = quantile_range
+        self.verbose = verbose
+        self.verbose_plot = verbose_plot
+        self.hist_bins = hist_bins
+        self.quiet = quiet
+
+        if self.quiet:
+            # Force all output to be supressed
+            # Useful when iterating over instances
+            self.verbose = False
+            self.verbose_plot = False
+
+    def compute_spatial_kmeans(self, bmi='ndvi', n_clusters=None):
+        """Cycle through all BMI and Compute BMI for each Scene, Resolution,
+            and Date
+
+        Args:
+            n_clusters (int, optional): Allow user to override the n_clusters
+                used in K-Means when hyperparameter optimizeding.
+                Defaults to None.
+        """
+        required_bands = ['B04', 'B08']
+        if bmi == 'gci':
+            required_bands = ['B03', 'B08']
+        if bmi == 'rci':
+            required_bands = ['B04', 'B08']
+
+        # Allow user to override n_clusters
+        n_clusters = self.n_clusters if n_clusters is None else n_clusters
+
+        scene_iter = tqdm(self.scenes.items(), disable=self.quiet)
+        for scene_id_, res_dict_ in scene_iter:
+            res_iter = tqdm(res_dict_.items(), disable=self.quiet)
+            for res_, date_dict_ in res_iter:
+                date_iter = tqdm(date_dict_.items(), disable=self.quiet)
+                for date_, band_data_ in date_iter:
+
+                    has_bands = np.any([
+                        band_ in band_data_.keys()
+                        for band_ in required_bands
+                    ])
+
+                    if not has_bands:
+                        warning_message(
+                            f'{bmi.upper()} cannot be computed without '
+                            + ' and '.join(required_bands)
+                        )
+                        continue
+
+                    # Compute K-Means Spatial Clustering per Image
+                    kmeans_ = kmeans_spatial_cluster(
+                        self.scenes[scene_id_][res_][date_][bmi],
+                        n_clusters=n_clusters,
+                        quantile_range=self.quantile_range,
+                        verbose=self.verbose,
+                        verbose_plot=self.verbose_plot,
+                        scene_id=scene_id_,
+                        res=res_,
+                        date=date_
+                    )
+
+                    # Store the result in the self.scenes data structure
+                    # This behaviour is used to maintain 79 characters per line
+                    kdict_ = self.scenes[scene_id_][res_][date_]
+                    if 'kmeans' not in kdict_.keys():
+                        kdict_['kmeans'] = {}
+
+                    kdict_['kmeans'][n_clusters] = kmeans_
+                    self.scenes[scene_id_][res_][date_] = kdict_
+
+    def compute_temporal_kmeans(self, bmi='ndvi', n_clusters=None):
+        """Cycle over all NDVI time series and Compute NDVI for each Scene,
+            Resolution, and Date
+
+        Args:
+            n_clusters (int, optional): Allow user to override the n_clusters
+                used in K-Means when hyperparameter optimizeding.
+                Defaults to None.
+        """
+        # Allow user to override n_clusters
+        n_clusters = self.n_clusters if n_clusters is None else n_clusters
+
+        scene_iter = tqdm(self.scenes.items(), disable=self.quiet)
+        for scene_id_, res_dict_ in scene_iter:
+            res_iter = tqdm(res_dict_.items(), disable=self.quiet)
+            for res_, date_dict_ in res_iter:
+                if 'timeseries' not in date_dict_.keys():
+                    continue
+
+                if bmi in date_dict_['timeseries'].keys():
+                    warning_message(
+                        f'Temporal {bmi} does not exist for '
+                        f'{scene_id_} at {res_}'
+                    )
+                    continue
+
+                if date_dict_['timeseries'][bmi].size == 0:
+                    warning_message(
+                        f'Temporal {bmi} is empty for {scene_id_} at {res_}'
+                    )
+                    continue
+
+                # Compute K-Means Spatial Clustering per Image
+                kmeans_ = kmeans_temporal_cluster(
+                    date_dict_['timeseries'][bmi],
+                    n_clusters=n_clusters,
+                    quantile_range=self.quantile_range,
+                    verbose=self.verbose,
+                    verbose_plot=self.verbose_plot,
+                    scene_id=scene_id_,
+                    res=res_
+                )
+
+                # Store the result in the self.scenes data structure
+                # This behaviour is used to maintaint 79 characters per line
+                kdict_ = self.scenes[scene_id_][res_]['timeseries']
+                if 'kmeans' not in kdict_.keys():
+                    kdict_['kmeans'] = {}
+
+                kdict_['kmeans'][n_clusters] = kmeans_
+                self.scenes[scene_id_][res_]['timeseries'] = kdict_
+
