@@ -304,10 +304,10 @@ class SentinelAOI:
                 date_iter = tqdm(date_dict_.items(), disable=self.quiet)
                 for date_, band_data_ in date_iter:
                     has_bands = np.any([
-                        band_ not in band_data_.keys()
+                        band_ in band_data_.keys()
                         for band_ in required_bands
                     ])
-                    if has_bands:
+                    if not has_bands:
                         warning_message(
                             f'{bmi.upper()} cannot be computed without '
                             + ' and '.join(required_bands)
@@ -654,191 +654,6 @@ class SentinelAOI:
         return self.__repr__()
 
 
-class KMeansBMI(SentinelAOI):
-    """KMeansBMI sub-class inherits SentinelAOI class and operates KMeans """
-
-    def __init__(
-            self, geojson: str,
-            start_date: str = '2020-01-01',
-            end_date: str = '2020-02-01',
-            cloud_cover: int = 1,
-            collection: str = 'sentinel-s2-l2a-cogs',
-            band_names: list = ['B04', 'B08'],
-            download: bool = False,
-            n_clusters: int = 5,
-            n_sig: int = 10,
-            quantile_range: list = [1, 99],
-            verbose: bool = False,
-            verbose_plot: bool = False,
-            hist_bins: int = 100,
-            quiet: bool = False
-    ):
-        """[summary]
-
-        Args:
-            geojson (str): filepath to geojson for AOI [Inherited]
-            start_date (str, optional): start date for STAC query.
-                Defaults to '2020-01-01'. [Inherited]
-            end_date (str, optional): end date for STAC Query.
-                Defaults to '2020-02-01'. [Inherited]
-            cloud_cover (int, optional): Percent cloud cover maximum.
-                Defaults to 1. [Inherited]
-            collection (str, optional): S3 bucket collection for STAC_API_URL.
-                Defaults to 'sentinel-s2-l2a-cogs'. [Inherited]
-            band_names (list, optional): Sentinel-2 band names.
-                Defaults to ['B04', 'B08']. [Inherited]
-            download (bool, optional): Flag whether to initate a download
-                (costs money). Defaults to False. [Inherited]
-            n_clusters (int, optional): number of clusters to operate K-Means.
-                Defaults to 5.
-            n_sig (int, optional): Number of sigma to flag outliers.
-                Defaults to 10.
-            quantile_range (list, optional): Range of distribution to
-                RobustScale. Defaults to [1, 99].
-            verbose (bool, optional): Flag whether to output extra print
-                statemetns to stdout. Defaults to False. [Inherited]
-            verbose_plot (bool, optional): Flag whether to display extra
-                matplotlib figures. Defaults to False.
-            hist_bins (int, optional): number of bins in matplotlib plt.hist.
-                Defaults to 100.
-            quiet (bool, optional): Flag to turn off all text and visual output
-        """
-        super().__init__(
-            geojson=geojson,
-            start_date=start_date,
-            end_date=end_date,
-            cloud_cover=cloud_cover,
-            collection=collection,
-            band_names=band_names,
-            download=download,
-            verbose=verbose,
-            quiet=quiet
-        )
-        self.n_clusters = n_clusters
-        self.n_sig = n_sig
-        self.quantile_range = quantile_range
-        self.verbose = verbose
-        self.verbose_plot = verbose_plot
-        self.hist_bins = hist_bins
-        self.quiet = quiet
-
-        if self.quiet:
-            # Force all output to be supressed
-            # Useful when iterating over instances
-            self.verbose = False
-            self.verbose_plot = False
-
-    def compute_spatial_kmeans(self, bmi='ndvi', n_clusters=None):
-        """Cycle through all BMI and Compute BMI for each Scene, Resolution,
-            and Date
-
-        Args:
-            n_clusters (int, optional): Allow user to override the n_clusters
-                used in K-Means when hyperparameter optimizeding.
-                Defaults to None.
-        """
-        required_bands = ['B04', 'B08']
-        if bmi == 'gci':
-            required_bands = ['B03', 'B08']
-        if bmi == 'rci':
-            required_bands = ['B04', 'B08']
-
-        # Allow user to override n_clusters
-        n_clusters = self.n_clusters if n_clusters is None else n_clusters
-
-        scene_iter = tqdm(self.scenes.items(), disable=self.quiet)
-        for scene_id_, res_dict_ in scene_iter:
-            res_iter = tqdm(res_dict_.items(), disable=self.quiet)
-            for res_, date_dict_ in res_iter:
-                date_iter = tqdm(date_dict_.items(), disable=self.quiet)
-                for date_, band_data_ in date_iter:
-
-                    has_bands = np.any([
-                        band_ not in band_data_.keys()
-                        for band_ in required_bands
-                    ])
-
-                    if has_bands:
-                        warning_message(
-                            f'{bmi.upper()} cannot be computed without '
-                            + ' and '.join(required_bands)
-                        )
-                        continue
-
-                    # Compute K-Means Spatial Clustering per Image
-                    kmeans_ = kmeans_spatial_cluster(
-                        self.scenes[scene_id_][res_][date_][bmi],
-                        n_clusters=n_clusters,
-                        quantile_range=self.quantile_range,
-                        verbose=self.verbose,
-                        verbose_plot=self.verbose_plot,
-                        scene_id=scene_id_,
-                        res=res_,
-                        date=date_
-                    )
-
-                    # Store the result in the self.scenes data structure
-                    # This behaviour is used to maintain 79 characters per line
-                    kdict_ = self.scenes[scene_id_][res_][date_]
-                    if 'kmeans' not in kdict_.keys():
-                        kdict_['kmeans'] = {}
-
-                    kdict_['kmeans'][n_clusters] = kmeans_
-                    self.scenes[scene_id_][res_][date_] = kdict_
-
-    def compute_temporal_kmeans(self, bmi='ndvi', n_clusters=None):
-        """Cycle over all NDVI time series and Compute NDVI for each Scene,
-            Resolution, and Date
-
-        Args:
-            n_clusters (int, optional): Allow user to override the n_clusters
-                used in K-Means when hyperparameter optimizeding.
-                Defaults to None.
-        """
-        # Allow user to override n_clusters
-        n_clusters = self.n_clusters if n_clusters is None else n_clusters
-
-        scene_iter = tqdm(self.scenes.items(), disable=self.quiet)
-        for scene_id_, res_dict_ in scene_iter:
-            res_iter = tqdm(res_dict_.items(), disable=self.quiet)
-            for res_, date_dict_ in res_iter:
-                if 'timeseries' not in date_dict_.keys():
-                    continue
-
-                if bmi in date_dict_['timeseries'].keys():
-                    warning_message(
-                        f'Temporal {bmi} does not exist for '
-                        f'{scene_id_} at {res_}'
-                    )
-                    continue
-
-                if date_dict_['timeseries'][bmi].size == 0:
-                    warning_message(
-                        f'Temporal {bmi} is empty for {scene_id_} at {res_}'
-                    )
-                    continue
-
-                # Compute K-Means Spatial Clustering per Image
-                kmeans_ = kmeans_temporal_cluster(
-                    date_dict_['timeseries'][bmi],
-                    n_clusters=n_clusters,
-                    quantile_range=self.quantile_range,
-                    verbose=self.verbose,
-                    verbose_plot=self.verbose_plot,
-                    scene_id=scene_id_,
-                    res=res_
-                )
-
-                # Store the result in the self.scenes data structure
-                # This behaviour is used to maintaint 79 characters per line
-                kdict_ = self.scenes[scene_id_][res_]['timeseries']
-                if 'kmeans' not in kdict_.keys():
-                    kdict_['kmeans'] = {}
-
-                kdict_['kmeans'][n_clusters] = kmeans_
-                self.scenes[scene_id_][res_]['timeseries'] = kdict_
-
-
 class PCABMI(SentinelAOI):
     """PCABMI sub-class inherits SentinelAOI class and operates PCA """
 
@@ -1029,3 +844,188 @@ class PCABMI(SentinelAOI):
 
                 kdict_['pca'][n_components] = pca_
                 self.scenes[scene_id_][res_]['timeseries'] = kdict_
+
+class KMeansBMI(SentinelAOI):
+    """KMeansBMI sub-class inherits SentinelAOI class and operates KMeans """
+
+    def __init__(
+            self, geojson: str,
+            start_date: str = '2020-01-01',
+            end_date: str = '2020-02-01',
+            cloud_cover: int = 1,
+            collection: str = 'sentinel-s2-l2a-cogs',
+            band_names: list = ['B04', 'B08'],
+            download: bool = False,
+            n_clusters: int = 5,
+            n_sig: int = 10,
+            quantile_range: list = [1, 99],
+            verbose: bool = False,
+            verbose_plot: bool = False,
+            hist_bins: int = 100,
+            quiet: bool = False
+    ):
+        """[summary]
+
+        Args:
+            geojson (str): filepath to geojson for AOI [Inherited]
+            start_date (str, optional): start date for STAC query.
+                Defaults to '2020-01-01'. [Inherited]
+            end_date (str, optional): end date for STAC Query.
+                Defaults to '2020-02-01'. [Inherited]
+            cloud_cover (int, optional): Percent cloud cover maximum.
+                Defaults to 1. [Inherited]
+            collection (str, optional): S3 bucket collection for STAC_API_URL.
+                Defaults to 'sentinel-s2-l2a-cogs'. [Inherited]
+            band_names (list, optional): Sentinel-2 band names.
+                Defaults to ['B04', 'B08']. [Inherited]
+            download (bool, optional): Flag whether to initate a download
+                (costs money). Defaults to False. [Inherited]
+            n_clusters (int, optional): number of clusters to operate K-Means.
+                Defaults to 5.
+            n_sig (int, optional): Number of sigma to flag outliers.
+                Defaults to 10.
+            quantile_range (list, optional): Range of distribution to
+                RobustScale. Defaults to [1, 99].
+            verbose (bool, optional): Flag whether to output extra print
+                statemetns to stdout. Defaults to False. [Inherited]
+            verbose_plot (bool, optional): Flag whether to display extra
+                matplotlib figures. Defaults to False.
+            hist_bins (int, optional): number of bins in matplotlib plt.hist.
+                Defaults to 100.
+            quiet (bool, optional): Flag to turn off all text and visual output
+        """
+        super().__init__(
+            geojson=geojson,
+            start_date=start_date,
+            end_date=end_date,
+            cloud_cover=cloud_cover,
+            collection=collection,
+            band_names=band_names,
+            download=download,
+            verbose=verbose,
+            quiet=quiet
+        )
+        self.n_clusters = n_clusters
+        self.n_sig = n_sig
+        self.quantile_range = quantile_range
+        self.verbose = verbose
+        self.verbose_plot = verbose_plot
+        self.hist_bins = hist_bins
+        self.quiet = quiet
+
+        if self.quiet:
+            # Force all output to be supressed
+            # Useful when iterating over instances
+            self.verbose = False
+            self.verbose_plot = False
+
+    def compute_spatial_kmeans(self, bmi='ndvi', n_clusters=None):
+        """Cycle through all BMI and Compute BMI for each Scene, Resolution,
+            and Date
+
+        Args:
+            n_clusters (int, optional): Allow user to override the n_clusters
+                used in K-Means when hyperparameter optimizeding.
+                Defaults to None.
+        """
+        required_bands = ['B04', 'B08']
+        if bmi == 'gci':
+            required_bands = ['B03', 'B08']
+        if bmi == 'rci':
+            required_bands = ['B04', 'B08']
+
+        # Allow user to override n_clusters
+        n_clusters = self.n_clusters if n_clusters is None else n_clusters
+
+        scene_iter = tqdm(self.scenes.items(), disable=self.quiet)
+        for scene_id_, res_dict_ in scene_iter:
+            res_iter = tqdm(res_dict_.items(), disable=self.quiet)
+            for res_, date_dict_ in res_iter:
+                date_iter = tqdm(date_dict_.items(), disable=self.quiet)
+                for date_, band_data_ in date_iter:
+
+                    has_bands = np.any([
+                        band_ in band_data_.keys()
+                        for band_ in required_bands
+                    ])
+
+                    if not has_bands:
+                        warning_message(
+                            f'{bmi.upper()} cannot be computed without '
+                            + ' and '.join(required_bands)
+                        )
+                        continue
+
+                    # Compute K-Means Spatial Clustering per Image
+                    kmeans_ = kmeans_spatial_cluster(
+                        self.scenes[scene_id_][res_][date_][bmi],
+                        n_clusters=n_clusters,
+                        quantile_range=self.quantile_range,
+                        verbose=self.verbose,
+                        verbose_plot=self.verbose_plot,
+                        scene_id=scene_id_,
+                        res=res_,
+                        date=date_
+                    )
+
+                    # Store the result in the self.scenes data structure
+                    # This behaviour is used to maintain 79 characters per line
+                    kdict_ = self.scenes[scene_id_][res_][date_]
+                    if 'kmeans' not in kdict_.keys():
+                        kdict_['kmeans'] = {}
+
+                    kdict_['kmeans'][n_clusters] = kmeans_
+                    self.scenes[scene_id_][res_][date_] = kdict_
+
+    def compute_temporal_kmeans(self, bmi='ndvi', n_clusters=None):
+        """Cycle over all NDVI time series and Compute NDVI for each Scene,
+            Resolution, and Date
+
+        Args:
+            n_clusters (int, optional): Allow user to override the n_clusters
+                used in K-Means when hyperparameter optimizeding.
+                Defaults to None.
+        """
+        # Allow user to override n_clusters
+        n_clusters = self.n_clusters if n_clusters is None else n_clusters
+
+        scene_iter = tqdm(self.scenes.items(), disable=self.quiet)
+        for scene_id_, res_dict_ in scene_iter:
+            res_iter = tqdm(res_dict_.items(), disable=self.quiet)
+            for res_, date_dict_ in res_iter:
+                if 'timeseries' not in date_dict_.keys():
+                    continue
+
+                if bmi in date_dict_['timeseries'].keys():
+                    warning_message(
+                        f'Temporal {bmi} does not exist for '
+                        f'{scene_id_} at {res_}'
+                    )
+                    continue
+
+                if date_dict_['timeseries'][bmi].size == 0:
+                    warning_message(
+                        f'Temporal {bmi} is empty for {scene_id_} at {res_}'
+                    )
+                    continue
+
+                # Compute K-Means Spatial Clustering per Image
+                kmeans_ = kmeans_temporal_cluster(
+                    date_dict_['timeseries'][bmi],
+                    n_clusters=n_clusters,
+                    quantile_range=self.quantile_range,
+                    verbose=self.verbose,
+                    verbose_plot=self.verbose_plot,
+                    scene_id=scene_id_,
+                    res=res_
+                )
+
+                # Store the result in the self.scenes data structure
+                # This behaviour is used to maintaint 79 characters per line
+                kdict_ = self.scenes[scene_id_][res_]['timeseries']
+                if 'kmeans' not in kdict_.keys():
+                    kdict_['kmeans'] = {}
+
+                kdict_['kmeans'][n_clusters] = kmeans_
+                self.scenes[scene_id_][res_]['timeseries'] = kdict_
+

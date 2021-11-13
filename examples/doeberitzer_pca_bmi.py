@@ -57,7 +57,7 @@ if __name__ == "__main__":
     args.add_argument("--n_sig", type=float, default=10)
     args.add_argument("--download", action="store_true")
     args.add_argument("--env_filename", type=str, default=".env")
-    args.add_argument("--n_clusters", type=int, default=5)
+    args.add_argument("--n_components", type=int, default=5)
     args.add_argument("--quantile_range", nargs="+", default=(1, 99))
     args.add_argument("--verbose", action="store_true")
     args.add_argument("--verbose_plot", action="store_true")
@@ -75,7 +75,7 @@ if __name__ == "__main__":
         collection=clargs.collection,
         band_names=[band_name_.upper() for band_name_ in clargs.band_names],
         download=clargs.download,
-        n_clusters=clargs.n_clusters,
+        n_components=clargs.n_components,
         n_sig=clargs.n_sig,
         quantile_range=clargs.quantile_range,
         verbose=clargs.verbose,
