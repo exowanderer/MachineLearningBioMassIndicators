@@ -47,7 +47,7 @@ def pca_spatial_components(
     pca.fit(pixel_scaled.reshape(-1, n_components + n_extra))
 
     if verbose_plot:
-        # Show NDVI components images
+        # Show BMI components images
         sanity_check_spatial_pca(
             pca, image, quantile_range=quantile_range,
             scene_id=scene_id, res=res, date=date
@@ -103,7 +103,7 @@ def pca_temporal_components(
     pca.fit(samples_scaled)
 
     if verbose_plot:
-        # Show NDVI components images
+        # Show BMI components images
         sanity_check_temporal_pca(
             pca, image_stack, quantile_range=quantile_range,
             scene_id=scene_id, res=res
@@ -112,15 +112,16 @@ def pca_temporal_components(
     return pca
 
 
-def sanity_check_ndvi_statistics(
-        image, scene_id, res, date, bins=100, plot_now=False):
+def sanity_check_bmi_statistics(
+        image, scene_id, res, date, bmi='ndvi', bins=100, plot_now=False):
     """Plot imshow and hist over image
 
     Args:
-        image (np.arra): iamge with which to visual
-        scene_id (str): Sentinel-2A L2A scene ID
-        res (str): Sentinel-2A L2A resolution
-        date (str): Sentinel-2A L2A acquistion datetime
+        image (np.array): iamge with which to visual.
+        scene_id (str): Sentinel-2A L2A scene ID.
+        res (str): Sentinel-2A L2A resolution.
+        date (str): Sentinel-2A L2A acquistion datetime.
+        bmi (str): key name for which BMI sanity checking. Default 'ndvi'.
         bins (int, optional): Number of bins for histogram. Defaults to 100.
     """
 
@@ -128,7 +129,7 @@ def sanity_check_ndvi_statistics(
     fig, (ax1, ax2) = plt.subplots(ncols=2, figsize=(20, 5))
     ax1.imshow(image, interpolation='None')
     ax1.set_title(
-        f"NDVI Image: {scene_id} - {res} - {date}",
+        f"{bmi.upper()} Image: {scene_id} - {res} - {date}",
         fontsize=20
     )
 
@@ -153,7 +154,7 @@ def sanity_check_ndvi_statistics(
     )
 
     ax2.set_title(
-        f"NDVI Hist: {scene_id} - {res} - {date}",
+        f"{bmi.upper()} Hist: {scene_id} - {res} - {date}",
         fontsize=20
     )
 

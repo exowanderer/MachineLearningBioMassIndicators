@@ -41,7 +41,7 @@ def kmeans_spatial_cluster(
     kmeans.fit(pixel_scaled)
 
     if verbose_plot:
-        # Show NDVI cluster images
+        # Show BMI cluster images
         sanity_check_spatial_kmeans(
             kmeans, image, quantile_range=quantile_range,
             scene_id=scene_id, res=res, date=date
@@ -92,7 +92,7 @@ def kmeans_temporal_cluster(
     kmeans.fit(samples_scaled)
 
     if verbose_plot:
-        # Show NDVI cluster images
+        # Show BMI cluster images
         sanity_check_temporal_kmeans(
             kmeans, image_stack, quantile_range=quantile_range,
             scene_id=scene_id, res=res
@@ -101,53 +101,6 @@ def kmeans_temporal_cluster(
     return kmeans
 
 
-def sanity_check_ndvi_statistics(
-        image, scene_id, res, date, bins=100, plot_now=False):
-    """Plot imshow and hist over image
-
-    Args:
-        image (np.arra): iamge with which to visual
-        scene_id (str): Sentinel-2A L2A scene ID
-        res (str): Sentinel-2A L2A resolution
-        date (str): Sentinel-2A L2A acquistion datetime
-        bins (int, optional): Number of bins for histogram. Defaults to 100.
-    """
-
-    # Sanity Check with imshow
-    fig, (ax1, ax2) = plt.subplots(ncols=2, figsize=(20, 5))
-    ax1.imshow(image, interpolation='None')
-    ax1.set_title(
-        f"NDVI Image: {scene_id} - {res} - {date}",
-        fontsize=20
-    )
-
-    # Remove all unnecessary markers from figure
-    ax1.grid(False)  # remove grid for images
-    ax1.xaxis.set_ticks([])  # remove xticks
-    ax1.yaxis.set_ticks([])  # remove xticks
-
-    # Sanity Check with visual histogram
-    ax2.hist(image.ravel()[(image.ravel() != 0)], bins=bins)
-    for tick in ax2.xaxis.get_major_ticks():
-        tick.label.set_fontsize(20)
-    for tick in ax2.yaxis.get_major_ticks():
-        tick.label.set_fontsize(20)
-
-    plt.subplots_adjust(
-        left=0,
-        right=1,
-        bottom=0,
-        top=.90,
-        wspace=1e-2
-    )
-
-    ax2.set_title(
-        f"NDVI Hist: {scene_id} - {res} - {date}",
-        fontsize=20
-    )
-
-    if plot_now:
-        plt.show()
 
 
 def sanity_check_spatial_kmeans(kmeans, image, quantile_range=(1, 99),
