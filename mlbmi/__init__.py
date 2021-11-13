@@ -1,9 +1,9 @@
 """Init file for mlbmi module"""
 from .mlbmi import (
-    KMeansNDVI,
-    KMeansNDVIParams,
-    PCANDVI,
-    PCANDVIParams,
+    KMeansBMI,
+    KMeansBMIParams,
+    PCABMI,
+    PCABMIParams,
     SentinelAOI,
     SentinelAOIParams
 )
