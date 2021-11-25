@@ -25,7 +25,7 @@ if __name__ == "__main__":
         --verbose_plot
 
 
-    To access the (paid for) JP2 files instead. Use
+    To access the (paid for) Sentinel files instead. Use
 
     python doeberitzer_pca_bmi.py \
         --band_names b03 b04 b08\
@@ -45,7 +45,9 @@ if __name__ == "__main__":
         default="doeberitzer_multipolygon.geojson"
     )
     args.add_argument("--scene_id", type=str)
-    args.add_argument("--band_names", nargs="+", default=["B03", "B04", "B08"])
+    args.add_argument(
+        "--band_names", nargs="+", default=["green", "red", "nir"]
+    )
     args.add_argument("--ndvi", action="store_true")
     args.add_argument("--gci", action="store_true")
     args.add_argument("--rci", action="store_true")
@@ -66,8 +68,8 @@ if __name__ == "__main__":
 
     load_dotenv(clargs.env_filename)
 
-    info_message("Generate JP2 PCABMI Instance")
-    jp2_data = PCABMI(
+    info_message("Generate Sentinel PCABMI Instance")
+    scene_data = PCABMI(
         geojson=clargs.geojson,
         start_date=clargs.start_date,
         end_date=clargs.end_date,
@@ -83,57 +85,64 @@ if __name__ == "__main__":
         quiet=clargs.quiet,
     )
 
-    info_message(jp2_data)
+    info_message("Querying Sat-Search for Bounding Box")
+    scene_data.search_earth_aws()
 
-    info_message("Downloading and acquiring images")
-    jp2_data.download_and_acquire_images()
+    if 'cogs' not in clargs.collection:
+        info_message("Downloading and acquiring full frame images")
+        scene_data.download_and_acquire_full_images()
 
-    info_message("Loading JP2 files into data structure")
-    jp2_data.load_data_into_struct()
+        info_message("Loading Sentinel full frame files into data structure")
+        scene_data.load_data_into_struct()
+    else:
+        info_message("Downloading and acquiring sub frame images")
+        scene_data.acquire_cog_images()
 
     info_message("Computing SCL Mask for all scenes")
-    jp2_data.create_scl_mask(mask_vals=[0, 1, 2, 3, 7, 8, 9, 10])
-
+    scene_data.create_scl_mask()  # mask_vals=[0, 1, 2, 3, 7, 8, 9, 10]
+    # clargs.ndvi = True
     if clargs.ndvi:
         info_message("Computing NDVI for all scenes")
-        jp2_data.compute_bmi_for_all(bmi='ndvi')
+        scene_data.compute_bmi_for_all(bmi='ndvi')
 
         info_message("Allocating NDVI time series")
-        jp2_data.allocate_bmi_timeseries(bmi='ndvi')
+        scene_data.allocate_bmi_timeseries(bmi='ndvi')
 
         info_message("Computing spatial K-Means for each scene NDVI")
-        jp2_data.compute_spatial_pca(bmi='ndvi')
+        scene_data.compute_spatial_pca(bmi='ndvi')
 
         info_message(
             "Computing temporal K-Means for each scene NDVIs over time"
         )
-        jp2_data.compute_temporal_pca(bmi='ndvi')
+        scene_data.compute_temporal_pca(bmi='ndvi')
 
     if clargs.gci:
         info_message("Computing GCI for all scenes")
-        jp2_data.compute_bmi_for_all(bmi='gci')
+        scene_data.compute_bmi_for_all(bmi='gci')
 
         info_message("Allocating GCI time series")
-        jp2_data.allocate_bmi_timeseries(bmi='gci')
+        scene_data.allocate_bmi_timeseries(bmi='gci')
 
         info_message("Computing spatial K-Means for each scene GCI")
-        jp2_data.compute_spatial_pca(bmi='gci')
+        scene_data.compute_spatial_pca(bmi='gci')
 
-        info_message("Computing temporal K-Means for each scene GCIs over time")
-        jp2_data.compute_temporal_pca(bmi='gci')
+        info_message(
+            "Computing temporal K-Means for each scene GCIs over time")
+        scene_data.compute_temporal_pca(bmi='gci')
 
     if clargs.rci:
         info_message("Computing RCI for all scenes")
-        jp2_data.compute_bmi_for_all(bmi='rci')
+        scene_data.compute_bmi_for_all(bmi='rci')
 
         info_message("Allocating RCI time series")
-        jp2_data.allocate_bmi_timeseries(bmi='rci')
+        scene_data.allocate_bmi_timeseries(bmi='rci')
 
         info_message("Computing spatial K-Means for each scene RCI")
-        jp2_data.compute_spatial_pca(bmi='rci')
+        scene_data.compute_spatial_pca(bmi='rci')
 
-        info_message("Computing temporal K-Means for each scene RCIs over time")
-        jp2_data.compute_temporal_pca(bmi='rci')
+        info_message(
+            "Computing temporal K-Means for each scene RCIs over time")
+        scene_data.compute_temporal_pca(bmi='rci')
 
     if clargs.verbose_plot:
         plt.show()

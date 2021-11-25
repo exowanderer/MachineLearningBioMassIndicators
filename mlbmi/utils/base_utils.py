@@ -2,20 +2,22 @@
 import os
 import json
 import numpy as np
+import rasterio
+import sys
 
+from datetime import datetime, timedelta
+from icecream import ic
 from matplotlib import pyplot as plt
+from pyproj import Transformer
+from rasterio.features import bounds
+from rasterio.mask import mask
+from rasterio.windows import Window
+from satsearch import Search
 from statsmodels.robust import scale
+from wget import download
 # from fiona.crs import from_epsg
 # from rasterio import plot
 # from rasterio.merge import merge
-from rasterio.mask import mask
-
-# from shapely.geometry import box
-from icecream import ic
-
-# import the wget module
-from wget import download
-
 
 ic.configureOutput(includeContext=True)
 
@@ -252,6 +254,115 @@ def download_tile_band(href, collection='sentinel-s2-l2a-cogs', s3_client=None):
     return output_filepath
 
 
+def download_cog_subscene(cog_fp, bbox):
+    coord_transformer = Transformer.from_crs("epsg:4326", cog_fp.crs)
+
+    # calculate pixels to be streamed in cog
+    coord_upper_left = coord_transformer.transform(bbox[3], bbox[0])
+    coord_lower_right = coord_transformer.transform(bbox[1], bbox[2])
+    pix_upper_left = cog_fp.index(coord_upper_left[0], coord_upper_left[1])
+    pix_lower_right = cog_fp.index(coord_lower_right[0], coord_lower_right[1])
+
+    for pixel in pix_upper_left + pix_lower_right:
+        # If the pixel value is below 0, that means that
+        # the bounds are not inside of our available dataset.
+        if pixel < 0:
+            print("Provided geometry extends available datafile.")
+            print("Provide a smaller area of interest to get a result.")
+            sys.exit()
+
+    # make http range request only for bytes in window
+    window = Window.from_slices(
+        (pix_upper_left[0], pix_lower_right[0]),
+        (pix_upper_left[1], pix_lower_right[1])
+    )
+
+    return cog_fp.read(1, window=window)
+
+
+def cog_download_and_plot_bands(search, geometry):
+    # debug_message(geojson)
+    # # file_path = "path/to/your/file.geojson"
+    # with open(geojson, "r") as fp:
+    #     file_content = json.load(fp)
+    # debug_message(file_content)
+    # geometry = file_content["features"][0]["geometry"]
+    # debug_message(geometry)
+    # debug_message(start_date, end_date)
+    # # only request images with cloudcover less than 20%
+    # query = {
+    #     "eo:cloud_cover": {
+    #         "lt": cloud_cover
+    #     }
+    # }
+    # debug_message(query)
+    # search = Search(
+    #     url='https://earth-search.aws.element84.com/v0',
+    #     intersects=geometry,
+    #     datetime=f"{start_date}/{end_date}",
+    #     collections=[collection],
+    #     query=query
+    # )
+    debug_message(search)
+    # Grab latest red && nir
+    items = search.items()
+    debug_message(items)
+    latest_data = items.dates()[-1]
+    debug_message(items[0].asset('scl'))
+    # scl = items[0].asset('scl')["href"]
+    red = items[0].asset('red')["href"]
+    nir = items[0].asset('nir')["href"]
+    print(f"Latest data found that intersects geometry: {latest_data}")
+    print(f"Url red band: {red}")
+    print(f"Url nir band: {nir}")
+
+    for geotiff_file in [red, nir]:  # , scl]:
+        with rasterio.open(geotiff_file) as geo_fp:
+            bbox = bounds(geometry)
+            coord_transformer = Transformer.from_crs(
+                "epsg:4326", geo_fp.crs)
+            # calculate pixels to be streamed in cog
+            coord_upper_left = coord_transformer.transform(
+                bbox[3], bbox[0])
+            coord_lower_right = coord_transformer.transform(
+                bbox[1], bbox[2])
+            pixel_upper_left = geo_fp.index(
+                coord_upper_left[0],
+                coord_upper_left[1]
+            )
+            pixel_lower_right = geo_fp.index(
+                coord_lower_right[0],
+                coord_lower_right[1]
+            )
+
+            for pixel in pixel_upper_left + pixel_lower_right:
+                # If the pixel value is below 0, that means that
+                # the bounds are not inside of our available dataset.
+                if pixel < 0:
+                    print("Provided geometry extends available datafile.")
+                    print("Provide a smaller area of interest to get a result.")
+                    sys.exit()
+
+            # make http range request only for bytes in window
+            window = Window.from_slices(
+                (
+                    pixel_upper_left[0],
+                    pixel_lower_right[0]
+                ),
+                (
+                    pixel_upper_left[1],
+                    pixel_lower_right[1]
+                )
+            )
+            subset = geo_fp.read(1, window=window)
+
+            # vizualize
+            import matplotlib.pyplot as plt
+            plt.imshow(subset, cmap="seismic")
+            plt.colorbar()
+            plt.show()
+
+
 def get_coords_from_geometry(gdf):
     """Function to parse features from GeoDataFrame in such a manner
         that rasterio wants them
@@ -338,10 +449,10 @@ def compute_ndvi(
 
     # Set outliers to median value
     ndvi_masked[outliers] = med_ndvi
-
+    debug_message(scl_mask.shape, ndvi_masked.shape)
     # If the SCL mas exists, then use it to remove 'bad pixels'
-    if scl_mask is not None:
-        ndvi_masked[scl_mask] = 0
+    # if scl_mask is not None:
+    #     ndvi_masked[scl_mask] = 0
 
     if verbose_plot:
         # Show NDVI image and plot the histogram over its values
@@ -537,7 +648,7 @@ def compute_scl_mask(
 
     # Convert from MAD to STD because Using the MAD is
     #   more agnostic to outliers than STD
-    mad2std = 1.4826
+    # mad2std = 1.4826
 
     # By definition, the CRS is identical across bands
     gdf_crs = gdf.to_crs(
@@ -553,6 +664,7 @@ def compute_scl_mask(
         shapes=coords,
         crop=True
     )
+    scl_masked_ = scl_masked_[0]
 
     scl_mask = np.ones_like(scl_masked_, dtype=bool)
     for val in mask_vals:
@@ -566,7 +678,7 @@ def compute_scl_mask(
     if verbose_plot:
         # Show RCI image and plot the histogram over its values
         sanity_check_image_statistics(
-            scl_mask[0], scene_id, res, date, image_name='SCL', bins=bins
+            scl_mask, scene_id, res, date, image_name='SCL', bins=bins
         )
 
     return scl_mask, mask_transform

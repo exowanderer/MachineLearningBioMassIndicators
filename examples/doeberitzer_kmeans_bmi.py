@@ -120,7 +120,8 @@ if __name__ == "__main__":
         info_message("Computing spatial K-Means for each scene GCI")
         jp2_data.compute_spatial_kmeans(bmi='gci')
 
-        info_message("Computing temporal K-Means for each scene GCIs over time")
+        info_message(
+            "Computing temporal K-Means for each scene GCIs over time")
         jp2_data.compute_temporal_kmeans(bmi='gci')
 
     if clargs.rci:
@@ -133,7 +134,8 @@ if __name__ == "__main__":
         info_message("Computing spatial K-Means for each scene RCI")
         jp2_data.compute_spatial_kmeans(bmi='rci')
 
-        info_message("Computing temporal K-Means for each scene RCIs over time")
+        info_message(
+            "Computing temporal K-Means for each scene RCIs over time")
         jp2_data.compute_temporal_kmeans(bmi='rci')
 
     if clargs.verbose_plot:
