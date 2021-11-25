@@ -1,11 +1,12 @@
 """Class definitions for mlbmi module"""
 import boto3
+import geopandas as gpd
 import joblib
+import numpy as np
 import os
 import rasterio
+import sys
 
-import geopandas as gpd
-import numpy as np
 
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -173,8 +174,9 @@ class SentinelAOI:
         bounding_box = geom_to_bounding_box(self.gdf)
 
         if self.verbose:
-            debug_message(
+            info_message(
                 sys._getframe().f_code.co_name,
+                'Search Query Parameters\n',
                 url=self.url_earth_search,
                 intersects=bounding_box['features'][0]['geometry'],
                 datetime=eo_datetime,
@@ -207,60 +209,60 @@ class SentinelAOI:
         self.items_geojson = self.items.geojson()
 
     def acquire_cog_images(self, band_names=['red', 'nir']):
+
         band_names = band_names if self.band_names is None else self.band_names
 
         for item_ in tqdm(self.items):
-            item_date_ = item_.date
-
-            # scl = items[0].asset('scl')["href"]
             hrefs = {band_: item_.asset(band_)["href"] for band_ in band_names}
-            # red = item_.asset('red')["href"]
-            # nir = item_.asset('nir')["href"]
 
             if self.verbose:
                 print(
-                    f"Latest data found that intersects geometry: {item_date_}"
+                    f"Latest data found that intersects geometry: {item_.date}"
                 )
                 for band_, href_ in hrefs.items():
                     print(f"URL {band_.upper()} band: {href_}")
 
-            for band_, geotiff_file in tqdm(hrefs.items()):  # , scl]:
-                with rasterio.open(geotiff_file) as cog_fp:
-                    product_id_ = item_.properties['sentinel:product_id']
-                    scene_id_ = product_id_.split('_')[5]
-                    date_ = item_.date.isoformat()
-                    res_ = 'cog'
+            product_id_ = item_.properties['sentinel:product_id']
+            scene_id_ = product_id_.split('_')[5]
+            date_ = item_.date.isoformat()
+            res_ = 'cog'
 
-                    # Build up data structure for easier access later
-                    if scene_id_ not in self.scenes.keys():
-                        # Set scenes are blank dict per scene
-                        self.scenes[scene_id_] = {}
+            # Build up data structure for easier access later
+            if scene_id_ not in self.scenes.keys():
+                # Set scenes are blank dict per scene
+                self.scenes[scene_id_] = {}
 
-                    if res_ not in self.scenes[scene_id_].keys():
-                        # Set resolutions dict are blank dict per resolution
-                        self.scenes[scene_id_][res_] = {}
+            if res_ not in self.scenes[scene_id_].keys():
+                # Set resolutions dict are blank dict per resolution
+                self.scenes[scene_id_][res_] = {}
 
-                    if date_ not in self.scenes[scene_id_][res_].keys():
-                        # Set dates dict are blank dict per date
-                        self.scenes[scene_id_][res_][date_] = {}
+            if date_ not in self.scenes[scene_id_][res_].keys():
+                # Set dates dict are blank dict per date
+                self.scenes[scene_id_][res_][date_] = {}
 
-                    if band_ not in self.scenes[scene_id_][res_][date_].keys():
-                        # Set band dict are blank dict per band
-                        self.scenes[scene_id_][res_][date_][band_] = {}
+            # scenes_ = self.scenes[scene_id_][res_][date_]
+            # for kgeo_, geometry_ in tqdm(enumerate(self.gdf['geometry'])):
+            #     if f"geometry{kgeo_}" not in scenes_.keys():
+            #         scenes_[f"geometry{kgeo_}"] = {}
+            geometry_ = self.gdf['geometry'][0]
+            for band_, geotiff_file in tqdm(hrefs.items()):
+                # with rasterio.open(geotiff_file) as cog_fp:
+                cog_fp = rasterio.open(geotiff_file)
+                # cog_fp.crs = cog_fp.crs.from_epsg("4326")
 
-                    scenes_ = self.scenes[scene_id_][res_][date_][band_]
-                    for k, geometry_ in tqdm(enumerate(self.gdf['geometry'])):
-                        if k not in scenes_.keys():
-                            scenes_[k] = {}
+                band_keys = self.scenes[scene_id_][res_][date_].keys()
+                if band_ not in band_keys:
+                    # Set band dict are blank dict per band
+                    self.scenes[scene_id_][res_][date_][band_] = {}
 
-                        bbox = bounds(geometry_)
-                        subscene = download_cog_subscene(cog_fp, bbox)
+                bbox = bounds(geometry_)
+                subscene = download_cog_subscene(cog_fp, bbox)
 
-                        # Load the JP2 file
-                        scenes_[k]['image'] = subscene
-                        scenes_[k]['raster'] = cog_fp
+                # Load the JP2 file
+                self.scenes[scene_id_][res_][date_][band_]['image'] = subscene
+                self.scenes[scene_id_][res_][date_][band_]['raster'] = cog_fp
 
-                    self.scenes[scene_id_][res_][date_][band_] = scenes_
+                # self.scenes[scene_id_][res_][date_][band_] = scenes_
 
     def download_full_image_filepaths(self):
         """Cycle through geoJSON to download files (if download is True)
@@ -280,6 +282,7 @@ class SentinelAOI:
             for feat_ in feat_iter:
                 # Loop over GeoJSON Bands
                 band_iter = tqdm(self.band_names, disable=self.quiet)
+
                 for bnd_name_ in band_iter:
                     if bnd_name_.upper() not in feat_['assets'].keys():
                         continue
@@ -332,7 +335,9 @@ class SentinelAOI:
                 for bnd_name_ in band_iter:
                     if bnd_name_.upper() not in feat_['assets'].keys():
                         continue
+
                     print(feat_['assets'][bnd_name_.upper()]['href'])
+
                     # Download the selected bands
                     _ = download_tile_band(  # filepath_
                         feat_['assets'][bnd_name_.upper()]['href'],
@@ -534,12 +539,12 @@ class SentinelAOI:
             for res_, date_dict_ in res_iter:
                 date_iter = tqdm(date_dict_.items(), disable=self.quiet)
                 for date_, band_data_ in date_iter:
-                    for band_ in required_bands:
-                        debug_message(
-                            sys._getframe().f_code.co_name,
-                            f"{band_} in {band_data_.keys()}:"
-                            f"{band_ in band_data_.keys()}"
-                        )
+                    # for band_ in required_bands:
+                    #     debug_message(
+                    #         sys._getframe().f_code.co_name,
+                    #         f"{band_} in {band_data_.keys()}:"
+                    #         f"{band_ in band_data_.keys()}"
+                    #     )
 
                     has_bands = np.any([
                         band_ in band_data_.keys()
@@ -552,22 +557,17 @@ class SentinelAOI:
                         )
                         continue
 
-                    # TODO all 3 `compute_bmi` functions accept SCL, but do not
-                    # know what to do with it
-                    # TODO Either have each `compute_bmi` compute which flags
-                    # to ignore in a mask or precompute the mask and send that
-                    # instead of band_data_['SCL']
+                    # TODO all 3 `compute_bmi` functions accept SCL,
+                    # but do not know what to do with it
+                    # TODO Either have each `compute_bmi` compute
+                    # which flags to ignore in a mask or precompute the mask
+                    # and send that instead of band_data_['SCL']
+
                     scl_mask_ = None
                     if not self.no_scl:
                         scl_mask_ = band_data_['scl_mask'] \
                             if 'scl_mask' in band_data_ else None
-                    debug_message(
-                        sys._getframe().f_code.co_name,
-                        f"band_data_[{required_bands[0]}] = "
-                        f"{band_data_[required_bands[0]]}",
-                        f"band_data_[{required_bands[1]}] = "
-                        f"{band_data_[required_bands[1]]}",
-                    )
+
                     # Compute BMI for individual scene, res, date
                     bmi_masked_, mask_transform_ = compute_bmi(
                         band_data_[required_bands[0]],
@@ -585,7 +585,7 @@ class SentinelAOI:
                     )
 
                     # Store the BMI and masked transform in data struct
-                    # Behaviour below used to maintain 79 characters per line
+                    # Behaviour below used to maintain 79 chars per line
                     date_dict_ = self.scenes[scene_id_][res_][date_]
                     date_dict_[bmi] = bmi_masked_
                     date_dict_['transform'] = mask_transform_
@@ -913,6 +913,7 @@ class PCABMI(SentinelAOI):
             cloud_cover: int = 1,
             collection: str = 'sentinel-s2-l2a-cogs',
             band_names: list = ['B04', 'B08'],
+            no_scl: bool = False,
             download: bool = False,
             n_components: int = 5,
             n_sig: int = 10,
@@ -961,7 +962,8 @@ class PCABMI(SentinelAOI):
             band_names=band_names,
             download=download,
             verbose=verbose,
-            quiet=quiet
+            quiet=quiet,
+            no_scl=no_scl
         )
         self.n_components = n_components
         self.n_sig = n_sig
@@ -1105,6 +1107,7 @@ class KMeansBMI(SentinelAOI):
             cloud_cover: int = 1,
             collection: str = 'sentinel-s2-l2a-cogs',
             band_names: list = ['B04', 'B08'],
+            no_scl: bool = False,
             download: bool = False,
             n_clusters: int = 5,
             n_sig: int = 10,
@@ -1153,7 +1156,8 @@ class KMeansBMI(SentinelAOI):
             band_names=band_names,
             download=download,
             verbose=verbose,
-            quiet=quiet
+            quiet=quiet,
+            no_scl=no_scl
         )
         self.n_clusters = n_clusters
         self.n_sig = n_sig

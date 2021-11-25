@@ -41,7 +41,7 @@ def warning_message(*args, end='\n', **kwargs):
         ic(f"{arg_}: {val_}")
 
 
-def debug_message(sys._getframe().f_code.co_name, *args, end='\n', **kwargs):
+def debug_message(*args, end='\n', **kwargs):
     ic.configureOutput(prefix='DEBUG | ')
     for arg_ in args:
         ic(arg_)
@@ -141,7 +141,8 @@ def geom_to_bounding_box(gdf):
     """
 
     # Find bounding box coordinates
-    min_lon, max_lon, min_lat, max_lat = bounding_box_coords(gdf)
+    # min_lon, max_lon, min_lat, max_lat = bounding_box_coords(gdf)
+    min_lon, min_lat, max_lon, max_lat = gdf.total_bounds
 
     # Return GeoJSON format with bounding box as AOI
     return {
@@ -254,7 +255,7 @@ def download_tile_band(href, collection='sentinel-s2-l2a-cogs', s3_client=None):
     return output_filepath
 
 
-def download_cog_subscene(cog_fp, bbox):
+def transform_geometry(cog_fp, bbox):
     coord_transformer = Transformer.from_crs("epsg:4326", cog_fp.crs)
 
     # calculate pixels to be streamed in cog
@@ -272,21 +273,23 @@ def download_cog_subscene(cog_fp, bbox):
             sys.exit()
 
     # make http range request only for bytes in window
-    window = Window.from_slices(
+    return Window.from_slices(
         (pix_upper_left[0], pix_lower_right[0]),
         (pix_upper_left[1], pix_lower_right[1])
     )
 
-    return cog_fp.read(1, window=window)
+
+def download_cog_subscene(cog_fp, bbox):
+    window = transform_geometry(cog_fp, bbox)
+    subscene = cog_fp.read(1, window=window)
+
+    return subscene
 
 
 def cog_download_and_plot_bands(search, geometry):
-    debug_message(sys._getframe().f_code.co_name, search)
     # Grab latest red && nir
     items = search.items()
-    debug_message(sys._getframe().f_code.co_name, items)
     latest_data = items.dates()[-1]
-    debug_message(sys._getframe().f_code.co_name, items[0].asset('scl'))
     # scl = items[0].asset('scl')["href"]
     red = items[0].asset('red')["href"]
     nir = items[0].asset('nir')["href"]
@@ -383,19 +386,19 @@ def compute_ndvi(
     Returns:
         tuple (np.array, affine.Affine): NDVI image and its related transform
     """
-    debug_message(sys._getframe().f_code.co_name,
-                  f"verbose_plot: {verbose_plot}")
+
     # Convert from MAD to STD because Using the MAD is
     #   more agnostic to outliers than STD
     mad2std = 1.4826
 
     # By definition, the CRS is identical across bands
-    gdf_crs = gdf.to_crs(
-        crs=band04['raster'].crs.data
-    )
 
     # Compute the AOI coordinates from the raster crs data
-    coords = get_coords_from_geometry(gdf_crs)
+    coords = get_coords_from_geometry(
+        gdf.to_crs(
+            crs=band04['raster'].crs.data
+        )
+    )
 
     # Mask Band04 data with AOI coords
     band04_masked, _ = mask(
@@ -429,8 +432,6 @@ def compute_ndvi(
 
     # Set outliers to median value
     ndvi_masked[outliers] = med_ndvi
-    debug_message(sys._getframe().f_code.co_name,
-                  scl_mask.shape, ndvi_masked.shape)
     # If the SCL mas exists, then use it to remove 'bad pixels'
     # if scl_mask is not None:
     #     ndvi_masked[scl_mask] = 0

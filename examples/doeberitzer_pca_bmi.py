@@ -2,7 +2,7 @@
 from argparse import ArgumentParser
 from dotenv import load_dotenv
 from matplotlib import pyplot as plt
-
+import sys
 from mlbmi import (
     PCABMI,
     info_message,
@@ -68,8 +68,6 @@ if __name__ == "__main__":
     clargs = args.parse_args()
 
     load_dotenv(clargs.env_filename)
-    if 'cogs' not in clargs.collection:
-        clargs.no_scl = True
 
     info_message("Generate Sentinel PCABMI Instance")
     scene_data = PCABMI(
@@ -86,6 +84,7 @@ if __name__ == "__main__":
         verbose=clargs.verbose,
         verbose_plot=clargs.verbose_plot,
         quiet=clargs.quiet,
+        no_scl='cogs' in clargs.collection
     )
 
     info_message("Querying Sat-Search for Bounding Box")
@@ -105,9 +104,6 @@ if __name__ == "__main__":
         info_message("Downloading and acquiring sub frame images")
         scene_data.acquire_cog_images()  # bands_names=clargs.bands_names)
 
-    clargs.ndvi = True
-    clargs.gci = True
-    clargs.rci = True
     if clargs.ndvi:
         info_message("Computing NDVI for all scenes")
         scene_data.compute_bmi_for_all(bmi='ndvi')
