@@ -41,7 +41,7 @@ def warning_message(*args, end='\n', **kwargs):
         ic(f"{arg_}: {val_}")
 
 
-def debug_message(*args, end='\n', **kwargs):
+def debug_message(sys._getframe().f_code.co_name, *args, end='\n', **kwargs):
     ic.configureOutput(prefix='DEBUG | ')
     for arg_ in args:
         ic(arg_)
@@ -281,34 +281,12 @@ def download_cog_subscene(cog_fp, bbox):
 
 
 def cog_download_and_plot_bands(search, geometry):
-    # debug_message(geojson)
-    # # file_path = "path/to/your/file.geojson"
-    # with open(geojson, "r") as fp:
-    #     file_content = json.load(fp)
-    # debug_message(file_content)
-    # geometry = file_content["features"][0]["geometry"]
-    # debug_message(geometry)
-    # debug_message(start_date, end_date)
-    # # only request images with cloudcover less than 20%
-    # query = {
-    #     "eo:cloud_cover": {
-    #         "lt": cloud_cover
-    #     }
-    # }
-    # debug_message(query)
-    # search = Search(
-    #     url='https://earth-search.aws.element84.com/v0',
-    #     intersects=geometry,
-    #     datetime=f"{start_date}/{end_date}",
-    #     collections=[collection],
-    #     query=query
-    # )
-    debug_message(search)
+    debug_message(sys._getframe().f_code.co_name, search)
     # Grab latest red && nir
     items = search.items()
-    debug_message(items)
+    debug_message(sys._getframe().f_code.co_name, items)
     latest_data = items.dates()[-1]
-    debug_message(items[0].asset('scl'))
+    debug_message(sys._getframe().f_code.co_name, items[0].asset('scl'))
     # scl = items[0].asset('scl')["href"]
     red = items[0].asset('red')["href"]
     nir = items[0].asset('nir')["href"]
@@ -405,6 +383,8 @@ def compute_ndvi(
     Returns:
         tuple (np.array, affine.Affine): NDVI image and its related transform
     """
+    debug_message(sys._getframe().f_code.co_name,
+                  f"verbose_plot: {verbose_plot}")
     # Convert from MAD to STD because Using the MAD is
     #   more agnostic to outliers than STD
     mad2std = 1.4826
@@ -449,7 +429,8 @@ def compute_ndvi(
 
     # Set outliers to median value
     ndvi_masked[outliers] = med_ndvi
-    debug_message(scl_mask.shape, ndvi_masked.shape)
+    debug_message(sys._getframe().f_code.co_name,
+                  scl_mask.shape, ndvi_masked.shape)
     # If the SCL mas exists, then use it to remove 'bad pixels'
     # if scl_mask is not None:
     #     ndvi_masked[scl_mask] = 0
@@ -485,6 +466,8 @@ def compute_gci(
     Returns:
         tuple (np.array, affine.Affine): GCI image and its related transform
     """
+    debug_message(sys._getframe().f_code.co_name,
+                  f"verbose_plot: {verbose_plot}")
     # Convert from MAD to STD because Using the MAD is
     #   more agnostic to outliers than STD
     mad2std = 1.4826
@@ -565,6 +548,8 @@ def compute_rci(
     Returns:
         tuple (np.array, affine.Affine): RCI image and its related transform
     """
+    debug_message(sys._getframe().f_code.co_name,
+                  f"verbose_plot: {verbose_plot}")
     # Convert from MAD to STD because Using the MAD is
     #   more agnostic to outliers than STD
     mad2std = 1.4826
@@ -645,7 +630,8 @@ def compute_scl_mask(
     Returns:
         tuple (np.array, affine.Affine): RCI image and its related transform
     """
-
+    debug_message(sys._getframe().f_code.co_name,
+                  f"verbose_plot: {verbose_plot}")
     # Convert from MAD to STD because Using the MAD is
     #   more agnostic to outliers than STD
     # mad2std = 1.4826

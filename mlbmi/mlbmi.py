@@ -1,7 +1,6 @@
 """Class definitions for mlbmi module"""
 import boto3
 import joblib
-import json
 import os
 import rasterio
 
@@ -10,7 +9,6 @@ import numpy as np
 
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from pyproj import Transformer
 from rasterio.features import bounds
 from satsearch import Search
 from tqdm import tqdm
@@ -147,10 +145,8 @@ class SentinelAOI:
             # Useful when iterating over instances
             self.verbose = False
 
-        if self.no_scl:
-            return
-
-        self.band_names.append('SCL')
+        if not self.no_scl:
+            self.band_names.append('SCL')
 
     def search_earth_aws(self):
         """Organize input parameters and call search query to AWS STAC API"""
@@ -178,6 +174,7 @@ class SentinelAOI:
 
         if self.verbose:
             debug_message(
+                sys._getframe().f_code.co_name,
                 url=self.url_earth_search,
                 intersects=bounding_box['features'][0]['geometry'],
                 datetime=eo_datetime,
@@ -209,13 +206,14 @@ class SentinelAOI:
         # Store STAC Sentinel-2 query as geoJSON
         self.items_geojson = self.items.geojson()
 
-    def acquire_cog_images(self, bands=['red', 'nir']):
-        # Grab latest red && nir
+    def acquire_cog_images(self, band_names=['red', 'nir']):
+        band_names = band_names if self.band_names is None else self.band_names
+
         for item_ in tqdm(self.items):
             item_date_ = item_.date
 
             # scl = items[0].asset('scl')["href"]
-            hrefs = {band_: item_.asset(band_)["href"] for band_ in bands}
+            hrefs = {band_: item_.asset(band_)["href"] for band_ in band_names}
             # red = item_.asset('red')["href"]
             # nir = item_.asset('nir')["href"]
 
@@ -260,6 +258,7 @@ class SentinelAOI:
 
                         # Load the JP2 file
                         scenes_[k]['image'] = subscene
+                        scenes_[k]['raster'] = cog_fp
 
                     self.scenes[scene_id_][res_][date_][band_] = scenes_
 
@@ -484,6 +483,9 @@ class SentinelAOI:
         # if bmi == 'rci':
         #     required_bands = ['B04', 'B08']
 
+        if self.no_scl:
+            return
+
         # Behaviour disable=self.quiet allows user to turn off tqdm via CLI
         scene_iter = tqdm(self.scenes.items(), disable=self.quiet)
         for scene_id_, res_dict_ in scene_iter:
@@ -532,6 +534,13 @@ class SentinelAOI:
             for res_, date_dict_ in res_iter:
                 date_iter = tqdm(date_dict_.items(), disable=self.quiet)
                 for date_, band_data_ in date_iter:
+                    for band_ in required_bands:
+                        debug_message(
+                            sys._getframe().f_code.co_name,
+                            f"{band_} in {band_data_.keys()}:"
+                            f"{band_ in band_data_.keys()}"
+                        )
+
                     has_bands = np.any([
                         band_ in band_data_.keys()
                         for band_ in required_bands
@@ -548,9 +557,17 @@ class SentinelAOI:
                     # TODO Either have each `compute_bmi` compute which flags
                     # to ignore in a mask or precompute the mask and send that
                     # instead of band_data_['SCL']
-                    scl_mask_ = band_data_['scl_mask'] \
-                        if 'scl_mask' in band_data_ else None
-
+                    scl_mask_ = None
+                    if not self.no_scl:
+                        scl_mask_ = band_data_['scl_mask'] \
+                            if 'scl_mask' in band_data_ else None
+                    debug_message(
+                        sys._getframe().f_code.co_name,
+                        f"band_data_[{required_bands[0]}] = "
+                        f"{band_data_[required_bands[0]]}",
+                        f"band_data_[{required_bands[1]}] = "
+                        f"{band_data_[required_bands[1]]}",
+                    )
                     # Compute BMI for individual scene, res, date
                     bmi_masked_, mask_transform_ = compute_bmi(
                         band_data_[required_bands[0]],
@@ -609,9 +626,9 @@ class SentinelAOI:
                 timeseries_dict['timestamps'] = timestamps_
 
                 self.scenes[scene_id_][res_]['timeseries'] = timeseries_dict
-
+    """
     def compute_ndvi_for_all(self, alpha=0):
-        """Cycle over self.scenes and compute NDVI for each scene and date_"""
+        '''Cycle over self.scenes and compute NDVI for each scene and date_'''
         # Behaviour disable=self.quiet allows user to turn off tqdm via CLI
         scene_iter = tqdm(self.scenes.items(), disable=self.quiet)
         for scene_id_, res_dict_ in scene_iter:
@@ -651,7 +668,7 @@ class SentinelAOI:
                     self.scenes[scene_id_][res_][date_] = date_dict_
 
     def compute_gci_for_all(self, alpha=0):
-        """Cycle over self.scenes and compute GCI for each scene and date_"""
+        '''Cycle over self.scenes and compute GCI for each scene and date_'''
         # Behaviour disable=self.quiet allows user to turn off tqdm via CLI
         scene_iter = tqdm(self.scenes.items(), disable=self.quiet)
         for scene_id_, res_dict_ in scene_iter:
@@ -691,7 +708,7 @@ class SentinelAOI:
                     self.scenes[scene_id_][res_][date_] = date_dict_
 
     def allocate_gci_timeseries(self):
-        """Allocate GCI images per scene and date inot time series"""
+        '''Allocate GCI images per scene and date inot time series'''
         scene_iter = tqdm(self.scenes.items(), disable=self.quiet)
         for scene_id_, res_dict_ in scene_iter:
             res_iter = tqdm(res_dict_.items(), disable=self.quiet)
@@ -726,7 +743,7 @@ class SentinelAOI:
                 self.scenes[scene_id_][res_]['timeseries'] = timeseries_dict
 
     def compute_rci_for_all(self, alpha=0):
-        """Cycle over self.scenes and compute RCI for each scene and date_"""
+        '''Cycle over self.scenes and compute RCI for each scene and date_'''
         # Behaviour disable=self.quiet allows user to turn off tqdm via CLI
         scene_iter = tqdm(self.scenes.items(), disable=self.quiet)
         for scene_id_, res_dict_ in scene_iter:
@@ -766,7 +783,7 @@ class SentinelAOI:
                     self.scenes[scene_id_][res_][date_] = date_dict_
 
     def allocate_rci_timeseries(self):
-        """Allocate RCI images per scene and date inot time series"""
+        '''Allocate RCI images per scene and date inot time series'''
         scene_iter = tqdm(self.scenes.items(), disable=self.quiet)
         for scene_id_, res_dict_ in scene_iter:
             res_iter = tqdm(res_dict_.items(), disable=self.quiet)
@@ -799,6 +816,7 @@ class SentinelAOI:
                 timeseries_dict['timestamps'] = timestamps_
 
                 self.scenes[scene_id_][res_]['timeseries'] = timeseries_dict
+    """
 
     def save_results(self, save_filename):
         info_message(f'Saving Results to JobLib file: {save_filename}')

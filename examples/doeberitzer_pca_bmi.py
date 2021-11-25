@@ -46,7 +46,8 @@ if __name__ == "__main__":
     )
     args.add_argument("--scene_id", type=str)
     args.add_argument(
-        "--band_names", nargs="+", default=["green", "red", "nir"]
+        # "--band_names", nargs="+", default=["green", "red", "nir"]
+        "--band_names", nargs="+", default=["b03", "b04", "b08"]
     )
     args.add_argument("--ndvi", action="store_true")
     args.add_argument("--gci", action="store_true")
@@ -67,6 +68,8 @@ if __name__ == "__main__":
     clargs = args.parse_args()
 
     load_dotenv(clargs.env_filename)
+    if 'cogs' not in clargs.collection:
+        clargs.no_scl = True
 
     info_message("Generate Sentinel PCABMI Instance")
     scene_data = PCABMI(
@@ -94,13 +97,17 @@ if __name__ == "__main__":
 
         info_message("Loading Sentinel full frame files into data structure")
         scene_data.load_data_into_struct()
+
+        info_message("Computing SCL Mask for all scenes")
+        scene_data.create_scl_mask()  # mask_vals=[0, 1, 2, 3, 7, 8, 9, 10]
+
     else:
         info_message("Downloading and acquiring sub frame images")
-        scene_data.acquire_cog_images()
+        scene_data.acquire_cog_images()  # bands_names=clargs.bands_names)
 
-    info_message("Computing SCL Mask for all scenes")
-    scene_data.create_scl_mask()  # mask_vals=[0, 1, 2, 3, 7, 8, 9, 10]
-    # clargs.ndvi = True
+    clargs.ndvi = True
+    clargs.gci = True
+    clargs.rci = True
     if clargs.ndvi:
         info_message("Computing NDVI for all scenes")
         scene_data.compute_bmi_for_all(bmi='ndvi')
