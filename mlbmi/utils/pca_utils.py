@@ -12,7 +12,7 @@ from . import (
     debug_message
 )
 
-from mlbmi.utils.base_utils import debug_message, warning_message, info_message
+# from mlbmi.utils.base_utils import debug_message, warning_message, info_message
 # from mlbmi import SentinelAOI
 
 
@@ -56,7 +56,7 @@ def pca_spatial_components(
         random_state=None,
     )
 
-    # Compute the K-Means components and store in object
+    # Compute the PCA components and store in object
     pca.fit(pixel_scaled.reshape(-1, n_components + n_extra))
 
     if verbose_plot:
@@ -112,7 +112,7 @@ def pca_temporal_components(
         random_state=None,
     )
 
-    # Compute the K-Means components and store in object
+    # Compute the PCA components and store in object
     pca.fit(samples_scaled)
 
     if verbose_plot:
@@ -160,7 +160,6 @@ def sanity_check_spatial_pca(
 
     # Cycle through and plot each components_pred image per 'class'
     for k, comp_ in enumerate(pca.components_):
-        print((components_pred == comp_).sum())
         axs[k + 1].imshow(
             (components_pred == comp_).T.reshape(image.shape),
             interpolation='None'
@@ -182,7 +181,7 @@ def sanity_check_spatial_pca(
 
     # Set title for entire figure
     fig.suptitle(
-        f"Spatial K-Means Reconstruction: {scene_id} - {res} - {date}",
+        f"Spatial PCA Reconstruction: {scene_id} - {res} - {date}",
         fontsize=20
     )
 
@@ -261,7 +260,7 @@ def sanity_check_temporal_pca(
 
     # Set title for entire figure
     fig.suptitle(
-        f"Temporal K-Means Reconstruction: {scene_id} - {res}",
+        f"Temporal PCA Reconstruction: {scene_id} - {res}",
         fontsize=20
     )
 

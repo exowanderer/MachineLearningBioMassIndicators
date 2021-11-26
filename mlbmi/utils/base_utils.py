@@ -467,8 +467,6 @@ def compute_gci(
     Returns:
         tuple (np.array, affine.Affine): GCI image and its related transform
     """
-    debug_message(sys._getframe().f_code.co_name,
-                  f"verbose_plot: {verbose_plot}")
     # Convert from MAD to STD because Using the MAD is
     #   more agnostic to outliers than STD
     mad2std = 1.4826
@@ -549,8 +547,6 @@ def compute_rci(
     Returns:
         tuple (np.array, affine.Affine): RCI image and its related transform
     """
-    debug_message(sys._getframe().f_code.co_name,
-                  f"verbose_plot: {verbose_plot}")
     # Convert from MAD to STD because Using the MAD is
     #   more agnostic to outliers than STD
     mad2std = 1.4826
@@ -631,8 +627,6 @@ def compute_scl_mask(
     Returns:
         tuple (np.array, affine.Affine): RCI image and its related transform
     """
-    debug_message(sys._getframe().f_code.co_name,
-                  f"verbose_plot: {verbose_plot}")
     # Convert from MAD to STD because Using the MAD is
     #   more agnostic to outliers than STD
     # mad2std = 1.4826

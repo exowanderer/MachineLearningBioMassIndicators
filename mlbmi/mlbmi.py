@@ -539,13 +539,6 @@ class SentinelAOI:
             for res_, date_dict_ in res_iter:
                 date_iter = tqdm(date_dict_.items(), disable=self.quiet)
                 for date_, band_data_ in date_iter:
-                    # for band_ in required_bands:
-                    #     debug_message(
-                    #         sys._getframe().f_code.co_name,
-                    #         f"{band_} in {band_data_.keys()}:"
-                    #         f"{band_ in band_data_.keys()}"
-                    #     )
-
                     has_bands = np.any([
                         band_ in band_data_.keys()
                         for band_ in required_bands
