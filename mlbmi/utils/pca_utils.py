@@ -12,7 +12,7 @@ from . import (
     debug_message
 )
 
-from mlbmi.utils.base_utils import debug_message, warning_message, info_message
+# from mlbmi.utils.base_utils import debug_message, warning_message, info_message
 # from mlbmi import SentinelAOI
 
 
@@ -21,6 +21,7 @@ def determine_n_components_extra(image_size, n_components):
         n_samples_ = image_size / (n_components + n_comp_extra)
         if int(n_samples_) == n_samples_:
             return n_comp_extra
+
 
 def pca_spatial_components(
         image, n_components=5, quantile_range=(1, 99), whiten=True,
@@ -41,7 +42,8 @@ def pca_spatial_components(
     #   rejecting the outliers using the RobustScaler algorithm
     n_extra = determine_n_components_extra(image.size, n_components)
     sclr = RobustScaler(quantile_range=quantile_range)
-    pixel_scaled = sclr.fit_transform(image.reshape(-1, n_components + n_extra))
+    pixel_scaled = sclr.fit_transform(
+        image.reshape(-1, n_components + n_extra))
 
     # Configure pca components instance
     pca = PCA(
@@ -54,7 +56,7 @@ def pca_spatial_components(
         random_state=None,
     )
 
-    # Compute the K-Means components and store in object
+    # Compute the PCA components and store in object
     pca.fit(pixel_scaled.reshape(-1, n_components + n_extra))
 
     if verbose_plot:
@@ -110,7 +112,7 @@ def pca_temporal_components(
         random_state=None,
     )
 
-    # Compute the K-Means components and store in object
+    # Compute the PCA components and store in object
     pca.fit(samples_scaled)
 
     if verbose_plot:
@@ -123,60 +125,10 @@ def pca_temporal_components(
     return pca
 
 
-def sanity_check_bmi_statistics(
-        image, scene_id, res, date, bmi='ndvi', bins=100, plot_now=False):
-    """Plot imshow and hist over image
-
-    Args:
-        image (np.array): iamge with which to visual.
-        scene_id (str): Sentinel-2A L2A scene ID.
-        res (str): Sentinel-2A L2A resolution.
-        date (str): Sentinel-2A L2A acquistion datetime.
-        bmi (str): key name for which BMI sanity checking. Default 'ndvi'.
-        bins (int, optional): Number of bins for histogram. Defaults to 100.
-    """
-
-    # Sanity Check with imshow
-    fig, (ax1, ax2) = plt.subplots(ncols=2, figsize=(20, 5))
-    ax1.imshow(image, interpolation='None')
-    ax1.set_title(
-        f"{bmi.upper()} Image: {scene_id} - {res} - {date}",
-        fontsize=20
-    )
-
-    # Remove all unnecessary markers from figure
-    ax1.grid(False)  # remove grid for images
-    ax1.xaxis.set_ticks([])  # remove xticks
-    ax1.yaxis.set_ticks([])  # remove xticks
-
-    # Sanity Check with visual histogram
-    ax2.hist(image.ravel()[(image.ravel() != 0)], bins=bins)
-    for tick in ax2.xaxis.get_major_ticks():
-        tick.label.set_fontsize(20)
-    for tick in ax2.yaxis.get_major_ticks():
-        tick.label.set_fontsize(20)
-
-    plt.subplots_adjust(
-        left=0,
-        right=1,
-        bottom=0,
-        top=.90,
-        wspace=1e-2
-    )
-
-    ax2.set_title(
-        f"{bmi.upper()} Hist: {scene_id} - {res} - {date}",
-        fontsize=20
-    )
-
-    if plot_now:
-        plt.show()
-
-
 def sanity_check_spatial_pca(
-    pca, image, quantile_range=(1, 99),
-    scene_id=None, res=None, date=None,
-    plot_now=False):
+        pca, image, quantile_range=(1, 99),
+        scene_id=None, res=None, date=None,
+        plot_now=False):
     """Plot imshow of components solution as sanity check
 
     Args:
@@ -208,7 +160,6 @@ def sanity_check_spatial_pca(
 
     # Cycle through and plot each components_pred image per 'class'
     for k, comp_ in enumerate(pca.components_):
-        print((components_pred == comp_).sum())
         axs[k + 1].imshow(
             (components_pred == comp_).T.reshape(image.shape),
             interpolation='None'
@@ -230,7 +181,7 @@ def sanity_check_spatial_pca(
 
     # Set title for entire figure
     fig.suptitle(
-        f"Spatial K-Means Reconstruction: {scene_id} - {res} - {date}",
+        f"Spatial PCA Reconstruction: {scene_id} - {res} - {date}",
         fontsize=20
     )
 
@@ -309,7 +260,7 @@ def sanity_check_temporal_pca(
 
     # Set title for entire figure
     fig.suptitle(
-        f"Temporal K-Means Reconstruction: {scene_id} - {res}",
+        f"Temporal PCA Reconstruction: {scene_id} - {res}",
         fontsize=20
     )
 
