@@ -38,7 +38,7 @@ if __name__ == "__main__":
         --collection sentinel-s2-l2a
     """
 
-    args = ArgumentParser(prog="Doeberitzer K-Means BMI")
+    args = ArgumentParser(prog="Doeberitzer PCA BMI")
     args.add_argument(
         "--geojson",
         type=str,
@@ -59,6 +59,7 @@ if __name__ == "__main__":
     args.add_argument("--cloud_cover", type=int, default=1)
     args.add_argument("--n_sig", type=float, default=10)
     args.add_argument("--download", action="store_true")
+    args.add_argument("--full_frame", action="store_true")
     args.add_argument("--env_filename", type=str, default=".env")
     args.add_argument("--n_components", type=int, default=5)
     args.add_argument("--quantile_range", nargs="+", default=(1, 99))
@@ -84,13 +85,13 @@ if __name__ == "__main__":
         verbose=clargs.verbose,
         verbose_plot=clargs.verbose_plot,
         quiet=clargs.quiet,
-        no_scl='cogs' in clargs.collection
+        no_scl='cogs' in clargs.collection  # until SCL becomes useful
     )
 
     info_message("Querying Sat-Search for Bounding Box")
     scene_data.search_earth_aws()
 
-    if 'cogs' not in clargs.collection:
+    if 'cogs' not in clargs.collection or clargs.full_frame:
         info_message("Downloading and acquiring full frame images")
         scene_data.download_and_acquire_full_images()
 
@@ -111,12 +112,10 @@ if __name__ == "__main__":
         info_message("Allocating NDVI time series")
         scene_data.allocate_bmi_timeseries(bmi='ndvi')
 
-        info_message("Computing spatial K-Means for each scene NDVI")
+        info_message("Computing spatial PCA for each scene NDVI")
         scene_data.compute_spatial_pca(bmi='ndvi')
 
-        info_message(
-            "Computing temporal K-Means for each scene NDVIs over time"
-        )
+        info_message("Computing temporal PCA for each scene NDVIs over time")
         scene_data.compute_temporal_pca(bmi='ndvi')
 
     if clargs.gci:
@@ -126,11 +125,10 @@ if __name__ == "__main__":
         info_message("Allocating GCI time series")
         scene_data.allocate_bmi_timeseries(bmi='gci')
 
-        info_message("Computing spatial K-Means for each scene GCI")
+        info_message("Computing spatial PCA for each scene GCI")
         scene_data.compute_spatial_pca(bmi='gci')
 
-        info_message(
-            "Computing temporal K-Means for each scene GCIs over time")
+        info_message("Computing temporal PCA for each scene GCIs over time")
         scene_data.compute_temporal_pca(bmi='gci')
 
     if clargs.rci:
@@ -140,11 +138,11 @@ if __name__ == "__main__":
         info_message("Allocating RCI time series")
         scene_data.allocate_bmi_timeseries(bmi='rci')
 
-        info_message("Computing spatial K-Means for each scene RCI")
+        info_message("Computing spatial PCA for each scene RCI")
         scene_data.compute_spatial_pca(bmi='rci')
 
         info_message(
-            "Computing temporal K-Means for each scene RCIs over time")
+            "Computing temporal PCA for each scene RCIs over time")
         scene_data.compute_temporal_pca(bmi='rci')
 
     if clargs.verbose_plot:

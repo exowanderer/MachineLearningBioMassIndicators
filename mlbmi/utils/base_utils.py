@@ -513,8 +513,8 @@ def compute_gci(
     gci_masked[outliers] = med_gci
 
     # If the SCL mas exists, then use it to remove 'bad pixels'
-    if scl_mask is not None:
-        gci_masked[scl_mask] = 0
+    # if scl_mask is not None:
+    #     gci_masked[scl_mask] = 0
 
     if verbose_plot:
         # Show GCI image and plot the histogram over its values
@@ -593,8 +593,8 @@ def compute_rci(
     rci_masked[outliers] = med_rci
 
     # If the SCL mas exists, then use it to remove 'bad pixels'
-    if scl_mask is not None:
-        rci_masked[scl_mask] = 0
+    # if scl_mask is not None:
+    #     rci_masked[scl_mask] = 0
 
     if verbose_plot:
         # Show RCI image and plot the histogram over its values
