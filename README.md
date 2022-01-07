@@ -1,4 +1,4 @@
-# Döberitzer Heide Nature Reserve K-Means Clustering for NDVI
+# K-Means Clustering for Biomass Indicators
 
 We here introduce an object-oriented pipeline for searching, acquiring, and manipulating Sentinel-2 scene images and bands. Our example below uses the [SatSearch API](https://medium.com/devseed/sat-api-an-api-for-spatiotemporal-asset-catalogs-88c3c78fdb0e) to query the _Earth on AWS_ datasets and compute the NDVI ([Normalized Difference Vegetation Index](https://en.wikipedia.org/wiki/Normalized_difference_vegetation_index)), as well as NDVI changes over time. We then computed the K-Means clusterirng centers both per image (greyscale levels) and over time (change analysis).
 
